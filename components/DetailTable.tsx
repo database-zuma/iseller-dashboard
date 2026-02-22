@@ -61,7 +61,7 @@ export default function DetailTable({ mode }: { mode: Mode }) {
   }, [searchParams]);
 
   const qs = searchParams.toString();
-  const apiUrl = `/api/detail?mode=${mode}&${qs}`;
+  const apiUrl = `/api/detail?v=2&mode=${mode}&${qs}`;
 
   const { data, isLoading } = useSWR<DetailResponse>(apiUrl, fetcher, {
     revalidateOnFocus: false,
