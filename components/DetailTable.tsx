@@ -10,23 +10,15 @@ import { toCSV, downloadCSV, downloadXLSX } from "@/lib/export";
 
 type Mode = "kode" | "kode_besar";
 
-interface KodeRow {
-  kode: string;
+interface DetailRow {
+  toko: string;
+  kode?: string;
+  kode_besar?: string;
   article: string;
-  series: string;
   gender: string;
-  tier: string;
-  pairs: number;
-  revenue: number;
-  avg_price: number;
-}
-
-interface KodeBesarRow {
-  kode_besar: string;
-  kode: string;
-  article: string;
-  size: string;
+  series: string;
   color: string;
+  tipe: string;
   tier: string;
   pairs: number;
   revenue: number;
@@ -34,16 +26,16 @@ interface KodeBesarRow {
 }
 
 interface DetailResponse {
-  rows: (KodeRow | KodeBesarRow)[];
+  rows: DetailRow[];
   total: number;
   page: number;
   pages: number;
 }
 
-const KODE_HEADERS = ["Kode", "Article", "Series", "Gender", "Tier", "Qty Sold", "Revenue", "ASP"];
-const KODE_KEYS = ["kode", "article", "series", "gender", "tier", "pairs", "revenue", "avg_price"];
-const KB_HEADERS = ["Kode Besar", "Kode", "Article", "Size", "Color", "Tier", "Qty Sold", "Revenue", "ASP"];
-const KB_KEYS = ["kode_besar", "kode", "article", "size", "color", "tier", "pairs", "revenue", "avg_price"];
+const KODE_HEADERS = ["Store", "Kode", "Article", "Gender", "Series", "Color", "Tipe", "Tier", "Qty", "Revenue", "ASP"];
+const KODE_KEYS = ["toko", "kode", "article", "gender", "series", "color", "tipe", "tier", "pairs", "revenue", "avg_price"];
+const KB_HEADERS = ["Store", "Kode Besar", "Article", "Gender", "Series", "Color", "Tipe", "Tier", "Qty", "Revenue", "ASP"];
+const KB_KEYS = ["toko", "kode_besar", "article", "gender", "series", "color", "tipe", "tier", "pairs", "revenue", "avg_price"];
 
 function fmtRp(n: number) {
   return "Rp " + Math.round(n).toLocaleString("en-US");
@@ -157,7 +149,7 @@ export default function DetailTable({ mode }: { mode: Mode }) {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground size-3.5 pointer-events-none z-10" />
           <Input
             type="text"
-            placeholder={mode === "kode_besar" ? "Search kode besar / article..." : "Search kode / article..."}
+            placeholder={mode === "kode_besar" ? "Search kode besar / article / store..." : "Search kode / article / store..."}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => {
@@ -200,65 +192,47 @@ export default function DetailTable({ mode }: { mode: Mode }) {
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-border bg-muted/30">
+                <Th col="toko" label="Store" />
                 {mode === "kode" ? (
-                  <>
-                    <Th col="kode" label="Kode" />
-                    <Th col="article" label="Article" />
-                    <Th col="series" label="Series" />
-                    <Th col="gender" label="Gender" />
-                    <Th col="tier" label="Tier" />
-                    <Th col="pairs" label="Qty" right />
-                    <Th col="revenue" label="Revenue" right />
-                    <Th col="avg_price" label="ASP" right />
-                  </>
+                  <Th col="kode" label="Kode" />
                 ) : (
-                  <>
-                    <Th col="kode_besar" label="Kode Besar" />
-                    <Th col="kode" label="Kode" />
-                    <Th col="article" label="Article" />
-                    <Th col="size" label="Size" />
-                    <Th col="color" label="Color" />
-                    <Th col="tier" label="Tier" />
-                    <Th col="pairs" label="Qty" right />
-                    <Th col="revenue" label="Revenue" right />
-                    <Th col="avg_price" label="ASP" right />
-                  </>
+                  <Th col="kode_besar" label="Kode Besar" />
                 )}
+                <Th col="article" label="Article" />
+                <Th col="gender" label="Gender" />
+                <Th col="series" label="Series" />
+                <Th col="color" label="Color" />
+                <Th col="tipe" label="Tipe" />
+                <Th col="tier" label="Tier" />
+                <Th col="pairs" label="Qty" right />
+                <Th col="revenue" label="Revenue" right />
+                <Th col="avg_price" label="ASP" right />
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 Array.from({ length: 10 }, (_, idx) => (
                   <tr key={`skel-${String(idx)}`} className="border-b border-border/50">
-                    {Array.from({ length: mode === "kode" ? 8 : 9 }, (_, cj) => (
+                    {Array.from({ length: 11 }, (_, cj) => (
                       <td key={`sc-${String(cj)}`} className="px-3 py-2.5">
                         <div className="h-3 bg-muted animate-pulse rounded-sm w-full" />
                       </td>
                     ))}
                   </tr>
                 ))
-              ) : mode === "kode" ? (
-                (data?.rows as KodeRow[] | undefined)?.map((r) => (
-                  <tr key={r.kode} className="border-b border-border/40 hover:bg-muted/20 transition-colors">
-                    <td className="px-3 py-2.5 font-mono text-[10px] font-medium">{r.kode || "—"}</td>
-                    <td className="px-3 py-2.5 max-w-[200px] truncate">{r.article || "—"}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground">{r.series || "—"}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground">{r.gender || "—"}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground">{r.tier ? `T${r.tier}` : "—"}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">{r.pairs.toLocaleString("en-US")}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">{fmtRp(r.revenue)}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">{fmtRp(r.avg_price)}</td>
-                  </tr>
-                ))
               ) : (
-                (data?.rows as KodeBesarRow[] | undefined)?.map((r) => (
-                  <tr key={r.kode_besar} className="border-b border-border/40 hover:bg-muted/20 transition-colors">
-                    <td className="px-3 py-2.5 font-mono text-[10px] font-medium">{r.kode_besar || "—"}</td>
-                    <td className="px-3 py-2.5 font-mono text-[10px]">{r.kode || "—"}</td>
-                    <td className="px-3 py-2.5 max-w-[200px] truncate">{r.article || "—"}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground">{r.size || "—"}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground max-w-[120px] truncate">{r.color || "—"}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground">{r.tier ? `T${r.tier}` : "—"}</td>
+                data?.rows?.map((r, idx) => (
+                  <tr key={`${r.toko}-${mode === "kode" ? r.kode : r.kode_besar}-${String(idx)}`} className="border-b border-border/40 hover:bg-muted/20 transition-colors">
+                    <td className="px-3 py-2.5 font-medium max-w-[150px] truncate" title={r.toko}>{r.toko || "—"}</td>
+                    <td className="px-3 py-2.5 font-mono text-[10px] font-medium max-w-[100px] truncate" title={mode === "kode" ? r.kode : r.kode_besar}>
+                      {mode === "kode" ? r.kode || "—" : r.kode_besar || "—"}
+                    </td>
+                    <td className="px-3 py-2.5 max-w-[180px] truncate" title={r.article}>{r.article || "—"}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground">{r.gender || "—"}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground max-w-[120px] truncate" title={r.series}>{r.series || "—"}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground max-w-[100px] truncate" title={r.color}>{r.color || "—"}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground">{r.tipe || "—"}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground">{r.tier && r.tier !== "Unknown" ? `T${r.tier}` : r.tier || "—"}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{r.pairs.toLocaleString("en-US")}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{fmtRp(r.revenue)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{fmtRp(r.avg_price)}</td>
@@ -267,7 +241,7 @@ export default function DetailTable({ mode }: { mode: Mode }) {
               )}
               {!isLoading && !data?.rows?.length && (
                 <tr>
-                  <td colSpan={mode === "kode" ? 8 : 9} className="px-3 py-8 text-center text-muted-foreground">No data</td>
+                  <td colSpan={11} className="px-3 py-8 text-center text-muted-foreground">No data</td>
                 </tr>
               )}
             </tbody>

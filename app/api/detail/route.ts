@@ -10,8 +10,14 @@ function parseMulti(sp: URLSearchParams, key: string): string[] {
   return val.split(",").map((v) => v.trim()).filter(Boolean);
 }
 
-const ALLOWED_SORT_KODE = new Set(["kode", "article", "series", "gender", "tier", "pairs", "revenue", "avg_price"]);
-const ALLOWED_SORT_KB = new Set(["kode_besar", "kode", "article", "size", "color", "tier", "pairs", "revenue", "avg_price"]);
+const ALLOWED_SORT_KODE = new Set([
+  "toko", "kode", "article", "series", "gender", "tier", "color", "tipe",
+  "pairs", "revenue", "avg_price"
+]);
+const ALLOWED_SORT_KB = new Set([
+  "toko", "kode_besar", "article", "series", "gender", "tier", "color", "tipe",
+  "pairs", "revenue", "avg_price"
+]);
 
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
@@ -39,10 +45,9 @@ export async function GET(req: NextRequest) {
     for (const [param, col] of [
       ["branch",  "d.branch"],
       ["store",   "d.toko"],
-      ["series",  "d.series"],
-      ["gender",  "d.gender"],
-      ["tier",    "d.tier"],
-      ["color",   "d.color"],
+      ["series",  "COALESCE(NULLIF(d.kodemix_series, ''), 'Unknown')"],
+      ["gender",  "COALESCE(NULLIF(d.kodemix_gender, ''), 'Unknown')"],
+      ["tier",    "COALESCE(NULLIF(d.kodemix_tier, ''), 'Unknown')"],
       ["tipe",    "d.tipe"],
     ] as [string, string][]) {
       const fv = parseMulti(sp, param);
@@ -52,12 +57,19 @@ export async function GET(req: NextRequest) {
       vals.push(...fv);
     }
 
+    const colorFv = parseMulti(sp, "color");
+    if (colorFv.length) {
+      const phs = colorFv.map(() => `$${i++}`).join(", ");
+      conds.push(`COALESCE(NULLIF(d.kodemix_color, ''), 'Unknown') IN (${phs})`);
+      vals.push(...colorFv);
+    }
+
     const q = sp.get("q");
     if (q) {
       if (mode === "kode_besar") {
-        conds.push(`(d.kode_besar ILIKE $${i} OR d.article ILIKE $${i})`);
+        conds.push(`(d.kode_besar ILIKE $${i} OR d.article ILIKE $${i} OR d.toko ILIKE $${i})`);
       } else {
-        conds.push(`(d.kode ILIKE $${i} OR d.article ILIKE $${i})`);
+        conds.push(`(d.kode ILIKE $${i} OR d.article ILIKE $${i} OR d.toko ILIKE $${i})`);
       }
       vals.push(`%${q}%`);
       i++;
@@ -67,12 +79,61 @@ export async function GET(req: NextRequest) {
 
     let groupBy: string;
     let selectCols: string;
+    let orderBy: string;
+
     if (mode === "kode_besar") {
-      groupBy = "d.kode_besar, d.kode, d.article, d.size, d.color, d.tier";
-      selectCols = "d.kode_besar, d.kode, d.article, d.size, d.color, d.tier";
+      groupBy = `d.toko, d.kode_besar, d.article, 
+                 COALESCE(NULLIF(d.kodemix_gender, ''), 'Unknown'), 
+                 COALESCE(NULLIF(d.kodemix_series, ''), 'Unknown'),
+                 COALESCE(NULLIF(d.kodemix_color, ''), 'Unknown'),
+                 d.tipe,
+                 COALESCE(NULLIF(d.tier, 'Unknown'), 'Unknown')`;
+      
+      selectCols = `d.toko,
+                    d.kode_besar,
+                    d.article,
+                    COALESCE(NULLIF(d.kodemix_gender, ''), 'Unknown') as gender,
+                    COALESCE(NULLIF(d.kodemix_series, ''), 'Unknown') as series,
+                    COALESCE(NULLIF(d.kodemix_color, ''), 'Unknown') as color,
+                    d.tipe,
+                    COALESCE(NULLIF(d.tier, 'Unknown'), 'Unknown') as tier`;
+      
+      orderBy = sort === "toko" ? `d.toko ${dir}` :
+                sort === "kode_besar" ? `d.kode_besar ${dir}` :
+                sort === "article" ? `d.article ${dir}` :
+                sort === "gender" ? `COALESCE(NULLIF(d.kodemix_gender, ''), 'Unknown') ${dir}` :
+                sort === "series" ? `COALESCE(NULLIF(d.kodemix_series, ''), 'Unknown') ${dir}` :
+                sort === "color" ? `COALESCE(NULLIF(d.kodemix_color, ''), 'Unknown') ${dir}` :
+                sort === "tipe" ? `d.tipe ${dir}` :
+                sort === "tier" ? `COALESCE(NULLIF(d.tier, 'Unknown'), 'Unknown') ${dir}` :
+                `${sort} ${dir} NULLS LAST`;
     } else {
-      groupBy = "d.kode, d.article, d.series, d.gender, d.tier";
-      selectCols = "d.kode, d.article, d.series, d.gender, d.tier";
+      groupBy = `d.toko, d.kode, d.kode_besar, d.article,
+                 COALESCE(NULLIF(d.kodemix_gender, ''), 'Unknown'),
+                 COALESCE(NULLIF(d.kodemix_series, ''), 'Unknown'),
+                 COALESCE(NULLIF(d.kodemix_color, ''), 'Unknown'),
+                 d.tipe,
+                 COALESCE(NULLIF(d.tier, 'Unknown'), 'Unknown')`;
+      
+      selectCols = `d.toko,
+                    d.kode,
+                    d.kode_besar,
+                    d.article,
+                    COALESCE(NULLIF(d.kodemix_gender, ''), 'Unknown') as gender,
+                    COALESCE(NULLIF(d.kodemix_series, ''), 'Unknown') as series,
+                    COALESCE(NULLIF(d.kodemix_color, ''), 'Unknown') as color,
+                    d.tipe,
+                    COALESCE(NULLIF(d.tier, 'Unknown'), 'Unknown') as tier`;
+      
+      orderBy = sort === "toko" ? `d.toko ${dir}` :
+                sort === "kode" ? `d.kode ${dir}` :
+                sort === "article" ? `d.article ${dir}` :
+                sort === "gender" ? `COALESCE(NULLIF(d.kodemix_gender, ''), 'Unknown') ${dir}` :
+                sort === "series" ? `COALESCE(NULLIF(d.kodemix_series, ''), 'Unknown') ${dir}` :
+                sort === "color" ? `COALESCE(NULLIF(d.kodemix_color, ''), 'Unknown') ${dir}` :
+                sort === "tipe" ? `d.tipe ${dir}` :
+                sort === "tier" ? `COALESCE(NULLIF(d.tier, 'Unknown'), 'Unknown') ${dir}` :
+                `${sort} ${dir} NULLS LAST`;
     }
 
     if (isExport) {
@@ -84,7 +145,7 @@ export async function GET(req: NextRequest) {
         FROM mart.mv_iseller_summary d
         ${where}
         GROUP BY ${groupBy}
-        ORDER BY ${sort === "pairs" || sort === "revenue" || sort === "avg_price" ? sort : `d.${sort}`} ${dir} NULLS LAST
+        ORDER BY ${orderBy}
       `;
       const dataRes = await pool.query(dataSql, vals);
       const rows = dataRes.rows.map((r: Record<string, unknown>) => ({
@@ -115,7 +176,7 @@ export async function GET(req: NextRequest) {
       FROM mart.mv_iseller_summary d
       ${where}
       GROUP BY ${groupBy}
-      ORDER BY ${sort === "pairs" || sort === "revenue" || sort === "avg_price" ? sort : `d.${sort}`} ${dir} NULLS LAST
+      ORDER BY ${orderBy}
       LIMIT $${i} OFFSET $${i + 1}
     `;
 
