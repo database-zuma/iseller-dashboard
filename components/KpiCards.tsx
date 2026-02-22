@@ -11,12 +11,14 @@ interface KpiData {
 
 function fmt(n: number, type: "currency" | "int" | "decimal"): string {
   if (type === "currency") {
-    return "Rp " + Math.round(n).toLocaleString("id-ID");
+    if (n >= 1_000_000_000) return `Rp ${(n / 1_000_000_000).toFixed(1)}B`;
+    if (n >= 1_000_000) return `Rp ${(n / 1_000_000).toFixed(0)}jt`;
+    return "Rp " + Math.round(n).toLocaleString("en-US");
   }
   if (type === "decimal") {
-    return n.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    return n.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   }
-  return Math.round(n).toLocaleString("id-ID");
+  return Math.round(n).toLocaleString("en-US");
 }
 
 const CARDS = [
@@ -35,13 +37,13 @@ export default function KpiCards({ kpis, loading }: { kpis?: KpiData; loading?: 
         <div
           key={key}
           title={tooltip}
-          className="bg-card border border-border rounded-md px-3 py-3 flex flex-col gap-0.5"
+          className="bg-card border border-border rounded-sm px-4 py-3 flex flex-col gap-1 border-l-2 border-l-[#00E273] shadow-sm"
         >
-          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
+          <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-[0.15em]">{label}</p>
           {loading ? (
-            <div className="h-5 w-20 bg-muted animate-pulse rounded" />
+            <div className="h-5 w-20 bg-muted animate-pulse rounded-sm" />
           ) : (
-            <p className="text-sm font-semibold text-foreground tabular-nums">
+            <p className="text-sm font-bold text-foreground tabular-nums tracking-tight">
               {kpis ? fmt(kpis[key], type) : "—"}
             </p>
           )}

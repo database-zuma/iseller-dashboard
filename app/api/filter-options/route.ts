@@ -21,16 +21,17 @@ function buildWhereClause(
 
   const from = sp.get("from");
   const to = sp.get("to");
-  if (from) { conds.push(`sale_date >= $${i++}`); vals.push(from); }
-  if (to)   { conds.push(`sale_date <= $${i++}`); vals.push(to); }
+  if (from) { conds.push(`d.sale_date >= $${i++}`); vals.push(from); }
+  if (to)   { conds.push(`d.sale_date <= $${i++}`); vals.push(to); }
 
   for (const [param, col] of [
-    ["branch", "branch"],
-    ["store",  "toko"],
-    ["series", "series"],
-    ["gender", "gender"],
-    ["tier",   "tier"],
-    ["payment","payment_type"],
+    ["branch", "d.branch"],
+    ["store",  "d.toko"],
+    ["gender", "d.gender"],
+    ["series", "d.series"],
+    ["color",  "d.color"],
+    ["tier",   "d.tier"],
+    ["tipe",   "k.tipe"],
   ] as [string, string][]) {
     if (param === skipParam) continue;
     const fv = parseMulti(sp, param);
@@ -47,30 +48,44 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
 
   try {
-    const dims = [
-      { key: "branches",     col: "branch",       param: "branch",  nullFilter: "branch IS NOT NULL AND branch != ''" },
-      { key: "stores",       col: "toko",         param: "store",   nullFilter: "toko IS NOT NULL AND toko != ''" },
-      { key: "series",       col: "series",       param: "series",  nullFilter: "series IS NOT NULL AND series != ''" },
-      { key: "genders",      col: "gender",       param: "gender",  nullFilter: "gender IS NOT NULL AND gender != ''" },
-      { key: "tiers",        col: "tier",         param: "tier",    nullFilter: "tier IS NOT NULL AND tier != ''" },
-      { key: "paymentTypes", col: "payment_type", param: "payment", nullFilter: "payment_type IS NOT NULL AND payment_type != ''" },
+    const dailyDims = [
+      { key: "branches", col: "d.branch",  param: "branch", nullFilter: "d.branch IS NOT NULL AND d.branch != ''" },
+      { key: "stores",   col: "d.toko",    param: "store",  nullFilter: "d.toko IS NOT NULL AND d.toko != ''" },
+      { key: "genders",  col: "d.gender",  param: "gender", nullFilter: "d.gender IS NOT NULL AND d.gender != ''" },
+      { key: "series",   col: "d.series",  param: "series", nullFilter: "d.series IS NOT NULL AND d.series != ''" },
+      { key: "colors",   col: "d.color",   param: "color",  nullFilter: "d.color IS NOT NULL AND d.color != ''" },
+      { key: "tiers",    col: "d.tier",    param: "tier",   nullFilter: "d.tier IS NOT NULL AND d.tier != ''" },
     ] as const;
 
+    const needsTipeJoin = parseMulti(sp, "tipe").length > 0;
+
     const results = await Promise.all(
-      dims.map(async (dim) => {
+      dailyDims.map(async (dim) => {
         const vals: unknown[] = [];
         const { conds } = buildWhereClause(sp, dim.param, vals, 1);
         conds.push(dim.nullFilter);
 
+        const join = needsTipeJoin
+          ? "LEFT JOIN portal.kodemix k ON d.kode_besar = k.kode_besar"
+          : "";
+
         const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
-        const sql = `SELECT DISTINCT ${dim.col} AS val FROM mart.iseller_daily ${where} ORDER BY val`;
+        const sql = `SELECT DISTINCT ${dim.col} AS val FROM mart.iseller_daily d ${join} ${where} ORDER BY val`;
         const res = await pool.query(sql, vals);
         return { key: dim.key, values: res.rows.map((r: Record<string, unknown>) => r.val).filter(Boolean) };
       })
     );
 
+    const tipeVals: unknown[] = [];
+    const { conds: tipeConds } = buildWhereClause(sp, "tipe", tipeVals, 1);
+    tipeConds.push("k.tipe IS NOT NULL AND k.tipe != ''");
+    const tipeWhere = tipeConds.length > 0 ? `WHERE ${tipeConds.join(" AND ")}` : "";
+    const tipeSql = `SELECT DISTINCT k.tipe AS val FROM mart.iseller_daily d JOIN portal.kodemix k ON d.kode_besar = k.kode_besar ${tipeWhere} ORDER BY val`;
+    const tipeRes = await pool.query(tipeSql, tipeVals);
+
     const body: Record<string, unknown[]> = {};
     for (const r of results) body[r.key] = r.values;
+    body.tipes = tipeRes.rows.map((r: Record<string, unknown>) => r.val).filter(Boolean);
 
     return NextResponse.json(body, {
       headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=3600" },

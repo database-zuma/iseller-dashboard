@@ -3,19 +3,21 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import useSWR from "swr";
-import { X, ChevronDown, Check } from "lucide-react";
+import { Search, X, ChevronDown, Check } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { fetcher } from "@/lib/fetcher";
 
 interface FilterOptions {
   branches: string[];
   stores: string[];
-  series: string[];
   genders: string[];
+  series: string[];
+  colors: string[];
   tiers: string[];
-  paymentTypes: string[];
+  tipes: string[];
 }
 
-const FILTER_KEYS = ["from", "to", "branch", "store", "series", "gender", "tier", "payment"] as const;
+const FILTER_KEYS = ["from", "to", "branch", "store", "gender", "series", "color", "tier", "tipe", "q"] as const;
 
 function MultiSelect({
   label,
@@ -96,11 +98,8 @@ function MultiSelect({
   }, []);
 
   useEffect(() => {
-    if (!open) {
-      setDropdownSearch("");
-    } else {
-      setTimeout(() => searchInputRef.current?.focus(), 0);
-    }
+    if (!open) setDropdownSearch("");
+    else setTimeout(() => searchInputRef.current?.focus(), 0);
   }, [open]);
 
   const labelText =
@@ -115,7 +114,7 @@ function MultiSelect({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className={`w-full inline-flex items-center justify-between gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-md border bg-card text-card-foreground hover:bg-muted transition-colors whitespace-nowrap
+        className={`w-full inline-flex items-center justify-between gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-sm border bg-card text-card-foreground hover:bg-muted transition-colors whitespace-nowrap
           ${selected.length > 0 ? "border-[#00E273]" : "border-border"}`}
       >
         <span className="truncate">{labelText}</span>
@@ -125,7 +124,7 @@ function MultiSelect({
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1 z-50 min-w-[160px] w-max max-w-[240px] rounded-md border border-border bg-card shadow-lg">
+        <div className="absolute top-full left-0 mt-1 z-50 min-w-[160px] w-max max-w-[240px] rounded-sm border border-border bg-card shadow-lg">
           <div className="p-1.5 border-b border-border">
             <input
               ref={searchInputRef}
@@ -133,7 +132,7 @@ function MultiSelect({
               placeholder="Search..."
               value={dropdownSearch}
               onChange={(e) => setDropdownSearch(e.target.value)}
-              className="w-full text-xs px-2 py-1 rounded border border-border bg-background text-foreground placeholder:text-muted-foreground outline-none focus:border-[#00E273]"
+              className="w-full text-xs px-2 py-1 rounded-sm border border-border bg-background text-foreground placeholder:text-muted-foreground outline-none focus:border-[#00E273]"
             />
           </div>
           <div className="max-h-56 overflow-y-auto">
@@ -144,7 +143,7 @@ function MultiSelect({
                 className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-muted transition-colors border-b border-border"
               >
                 <span
-                  className={`size-4 rounded flex items-center justify-center flex-shrink-0 border transition-colors
+                  className={`size-4 rounded-sm flex items-center justify-center flex-shrink-0 border transition-colors
                     ${allSelected ? "bg-[#00E273] border-[#00E273]" : "border-border bg-background"}`}
                 >
                   {allSelected && <Check className="size-2.5 text-black stroke-[3]" />}
@@ -175,7 +174,7 @@ function MultiSelect({
                   className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-muted transition-colors text-left"
                 >
                   <span
-                    className={`size-4 rounded flex items-center justify-center flex-shrink-0 border transition-colors
+                    className={`size-4 rounded-sm flex items-center justify-center flex-shrink-0 border transition-colors
                       ${checked ? "bg-[#00E273] border-[#00E273]" : "border-border bg-background"}`}
                   >
                     {checked && <Check className="size-2.5 text-black stroke-[3]" />}
@@ -194,11 +193,10 @@ function MultiSelect({
 export default function FilterBar() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [search, setSearch] = useState(searchParams.get("q") || "");
 
   const today = new Date().toISOString().substring(0, 10);
-  const defaultFrom = new Date(Date.now() - 30 * 86400000).toISOString().substring(0, 10);
-
-  const fromVal = searchParams.get("from") || defaultFrom;
+  const fromVal = searchParams.get("from") || "2026-01-01";
   const toVal = searchParams.get("to") || today;
 
   const filterQs = searchParams.toString();
@@ -207,6 +205,10 @@ export default function FilterBar() {
     fetcher,
     { revalidateOnFocus: false, dedupingInterval: 300000, keepPreviousData: true }
   );
+
+  useEffect(() => {
+    setSearch(searchParams.get("q") || "");
+  }, [searchParams]);
 
   const setDate = useCallback(
     (key: "from" | "to", val: string) => {
@@ -219,62 +221,116 @@ export default function FilterBar() {
     [router, searchParams]
   );
 
+  const applySearch = useCallback(
+    (val: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (val.trim()) params.set("q", val.trim());
+      else params.delete("q");
+      params.delete("page");
+      router.push(`/?${params.toString()}`);
+    },
+    [router, searchParams]
+  );
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter") {
+        const val = e.currentTarget.value;
+        setSearch(val);
+        applySearch(val);
+      }
+    },
+    [applySearch]
+  );
+
+  const clearSearch = useCallback(() => {
+    setSearch("");
+    applySearch("");
+  }, [applySearch]);
+
   const resetAll = useCallback(() => {
+    setSearch("");
     router.push("/");
   }, [router]);
 
   const hasFilters = FILTER_KEYS.some((k) => searchParams.has(k));
 
   return (
-    <div className="flex gap-1.5 items-center w-full flex-wrap">
-      <div className="flex items-center gap-1 flex-shrink-0">
-        <label htmlFor="filter-from" className="text-xs text-muted-foreground font-medium">From</label>
-        <input
-          id="filter-from"
-          type="date"
-          value={fromVal}
-          onChange={(e) => setDate("from", e.target.value)}
-          className="text-xs px-2 py-1.5 rounded-md border border-border bg-card text-foreground outline-none focus:border-[#00E273] cursor-pointer"
+    <div className="flex flex-col gap-2 w-full">
+      <div className="flex gap-1.5 items-center w-full flex-wrap">
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <label htmlFor="filter-from" className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">From</label>
+          <input
+            id="filter-from"
+            type="date"
+            value={fromVal}
+            onChange={(e) => setDate("from", e.target.value)}
+            className="text-xs px-2 py-1.5 rounded-sm border border-border bg-card text-foreground outline-none focus:border-[#00E273] cursor-pointer"
+          />
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <label htmlFor="filter-to" className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">To</label>
+          <input
+            id="filter-to"
+            type="date"
+            value={toVal}
+            onChange={(e) => setDate("to", e.target.value)}
+            className="text-xs px-2 py-1.5 rounded-sm border border-border bg-card text-foreground outline-none focus:border-[#00E273] cursor-pointer"
+          />
+        </div>
+        <div className="flex-1 min-w-[90px]">
+          <MultiSelect label="BRANCH" paramKey="branch" options={opts?.branches || []} />
+        </div>
+        <div className="flex-1 min-w-[90px]">
+          <MultiSelect label="STORE" paramKey="store" options={opts?.stores || []} />
+        </div>
+        <div className="flex-1 min-w-[80px]">
+          <MultiSelect label="GENDER" paramKey="gender" options={opts?.genders || []} />
+        </div>
+        <div className="flex-1 min-w-[80px]">
+          <MultiSelect label="SERIES" paramKey="series" options={opts?.series || []} />
+        </div>
+        <div className="flex-1 min-w-[80px]">
+          <MultiSelect label="COLOR" paramKey="color" options={opts?.colors || []} />
+        </div>
+        <div className="flex-1 min-w-[70px]">
+          <MultiSelect label="TIER" paramKey="tier" options={opts?.tiers || []} />
+        </div>
+        <div className="flex-1 min-w-[80px]">
+          <MultiSelect label="TIPE" paramKey="tipe" options={opts?.tipes || []} />
+        </div>
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={resetAll}
+            className="flex-shrink-0 px-2.5 py-1.5 text-xs font-semibold rounded-sm bg-secondary text-secondary-foreground border border-border hover:bg-muted transition-colors cursor-pointer flex items-center gap-1"
+          >
+            <X className="size-3" />
+            Reset
+          </button>
+        )}
+      </div>
+
+      <div className="relative w-full">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground size-3.5 pointer-events-none z-10" />
+        <Input
+          type="text"
+          placeholder="Search kode, article, kode besar... (Enter to search)"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={handleKeyDown}
+          className="pl-9 h-8 text-xs bg-card w-full rounded-sm"
         />
+        {search && (
+          <button
+            type="button"
+            onClick={clearSearch}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground z-10"
+          >
+            <X className="size-3" />
+          </button>
+        )}
       </div>
-      <div className="flex items-center gap-1 flex-shrink-0">
-        <label htmlFor="filter-to" className="text-xs text-muted-foreground font-medium">To</label>
-        <input
-          id="filter-to"
-          type="date"
-          value={toVal}
-          onChange={(e) => setDate("to", e.target.value)}
-          className="text-xs px-2 py-1.5 rounded-md border border-border bg-card text-foreground outline-none focus:border-[#00E273] cursor-pointer"
-        />
-      </div>
-      <div className="flex-1 min-w-[90px]">
-        <MultiSelect label="BRANCH" paramKey="branch" options={opts?.branches || []} />
-      </div>
-      <div className="flex-1 min-w-[90px]">
-        <MultiSelect label="STORE" paramKey="store" options={opts?.stores || []} />
-      </div>
-      <div className="flex-1 min-w-[80px]">
-        <MultiSelect label="SERIES" paramKey="series" options={opts?.series || []} />
-      </div>
-      <div className="flex-1 min-w-[80px]">
-        <MultiSelect label="GENDER" paramKey="gender" options={opts?.genders || []} />
-      </div>
-      <div className="flex-1 min-w-[70px]">
-        <MultiSelect label="TIER" paramKey="tier" options={opts?.tiers || []} />
-      </div>
-      <div className="flex-1 min-w-[100px]">
-        <MultiSelect label="PAYMENT" paramKey="payment" options={opts?.paymentTypes || []} />
-      </div>
-      {hasFilters && (
-        <button
-          type="button"
-          onClick={resetAll}
-          className="flex-shrink-0 px-2.5 py-1.5 text-xs font-medium rounded-md bg-secondary text-secondary-foreground border border-border hover:bg-muted transition-colors cursor-pointer flex items-center gap-1"
-        >
-          <X className="size-3" />
-          Reset
-        </button>
-      )}
     </div>
   );
 }

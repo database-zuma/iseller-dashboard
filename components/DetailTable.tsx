@@ -3,9 +3,10 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useCallback, useEffect } from "react";
 import useSWR from "swr";
-import { ChevronUp, ChevronDown, Search, X } from "lucide-react";
+import { ChevronUp, ChevronDown, Search, X, Download } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { fetcher } from "@/lib/fetcher";
+import { toCSV, downloadCSV, downloadXLSX } from "@/lib/export";
 
 type Mode = "kode" | "kode_besar";
 
@@ -39,8 +40,13 @@ interface DetailResponse {
   pages: number;
 }
 
+const KODE_HEADERS = ["Kode", "Article", "Series", "Gender", "Tier", "Qty Sold", "Revenue", "ASP"];
+const KODE_KEYS = ["kode", "article", "series", "gender", "tier", "pairs", "revenue", "avg_price"];
+const KB_HEADERS = ["Kode Besar", "Kode", "Article", "Size", "Color", "Tier", "Qty Sold", "Revenue", "ASP"];
+const KB_KEYS = ["kode_besar", "kode", "article", "size", "color", "tier", "pairs", "revenue", "avg_price"];
+
 function fmtRp(n: number) {
-  return "Rp " + Math.round(n).toLocaleString("id-ID");
+  return "Rp " + Math.round(n).toLocaleString("en-US");
 }
 
 function SortIcon({ col, sort, dir }: { col: string; sort: string; dir: string }) {
@@ -52,6 +58,7 @@ export default function DetailTable({ mode }: { mode: Mode }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [search, setSearch] = useState(searchParams.get("q") || "");
+  const [exporting, setExporting] = useState(false);
 
   const page = parseInt(searchParams.get("page") || "1", 10);
   const sort = searchParams.get("sort") || "revenue";
@@ -109,9 +116,31 @@ export default function DetailTable({ mode }: { mode: Mode }) {
     [searchParams, push]
   );
 
+  const handleExport = useCallback(async (format: "csv" | "xlsx") => {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams(qs);
+      params.set("export", "all");
+      params.set("mode", mode);
+      const res = await fetch(`/api/detail?${params}`);
+      const json = await res.json();
+      const rows = json.rows as Record<string, unknown>[];
+      const headers = mode === "kode_besar" ? KB_HEADERS : KODE_HEADERS;
+      const keys = mode === "kode_besar" ? KB_KEYS : KODE_KEYS;
+      const filename = `iseller-detail-${mode}`;
+      if (format === "csv") {
+        downloadCSV(toCSV(headers, rows, keys), `${filename}.csv`);
+      } else {
+        await downloadXLSX(headers, rows, keys, `${filename}.xlsx`);
+      }
+    } finally {
+      setExporting(false);
+    }
+  }, [qs, mode]);
+
   const Th = ({ col, label, right }: { col: string; label: string; right?: boolean }) => (
     <th
-      className={`px-3 py-2 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors ${right ? "text-right" : "text-left"}`}
+      className={`px-3 py-2.5 text-[9px] font-bold text-muted-foreground uppercase tracking-[0.12em] cursor-pointer select-none hover:text-foreground transition-colors ${right ? "text-right" : "text-left"}`}
       onClick={() => setSort(col)}
     >
       <span className="inline-flex items-center gap-0.5">
@@ -123,34 +152,54 @@ export default function DetailTable({ mode }: { mode: Mode }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="relative w-full max-w-xs">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground size-3.5 pointer-events-none z-10" />
-        <Input
-          type="text"
-          placeholder={mode === "kode_besar" ? "Search kode besar / article..." : "Search kode / article..."}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") applySearch(e.currentTarget.value);
-          }}
-          className="pl-9 h-8 text-xs bg-card"
-        />
-        {search && (
+      <div className="flex items-center justify-between gap-3">
+        <div className="relative w-full max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground size-3.5 pointer-events-none z-10" />
+          <Input
+            type="text"
+            placeholder={mode === "kode_besar" ? "Search kode besar / article..." : "Search kode / article..."}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") applySearch(e.currentTarget.value);
+            }}
+            className="pl-9 h-8 text-xs bg-card rounded-sm"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => { setSearch(""); applySearch(""); }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground z-10"
+            >
+              <X className="size-3" />
+            </button>
+          )}
+        </div>
+        <div className="flex gap-2 flex-shrink-0">
           <button
             type="button"
-            onClick={() => { setSearch(""); applySearch(""); }}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground z-10"
+            disabled={exporting || !data}
+            onClick={() => handleExport("csv")}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold rounded-sm border border-border bg-card hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
-            <X className="size-3" />
+            <Download className="size-3" /> CSV
           </button>
-        )}
+          <button
+            type="button"
+            disabled={exporting || !data}
+            onClick={() => handleExport("xlsx")}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-semibold rounded-sm border border-border bg-card hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <Download className="size-3" /> XLSX
+          </button>
+        </div>
       </div>
 
-      <div className="bg-card border border-border rounded-md overflow-hidden">
+      <div className="bg-card border border-border rounded-sm overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-border bg-muted/50">
+              <tr className="border-b border-border bg-muted/30">
                 {mode === "kode" ? (
                   <>
                     <Th col="kode" label="Kode" />
@@ -179,46 +228,46 @@ export default function DetailTable({ mode }: { mode: Mode }) {
             </thead>
             <tbody>
               {isLoading ? (
-                ["a","b","c","d","e","f","g","h","i","j"].map((k) => (
-                  <tr key={`skel-row-${k}`} className="border-b border-border">
-                    {["c1","c2","c3","c4","c5","c6","c7","c8"].slice(0, mode === "kode" ? 8 : 9).map((cj) => (
-                      <td key={`skel-${k}-${cj}`} className="px-3 py-2">
-                        <div className="h-3 bg-muted animate-pulse rounded w-full" />
+                Array.from({ length: 10 }, (_, idx) => (
+                  <tr key={`skel-${String(idx)}`} className="border-b border-border/50">
+                    {Array.from({ length: mode === "kode" ? 8 : 9 }, (_, cj) => (
+                      <td key={`sc-${String(cj)}`} className="px-3 py-2.5">
+                        <div className="h-3 bg-muted animate-pulse rounded-sm w-full" />
                       </td>
                     ))}
                   </tr>
                 ))
               ) : mode === "kode" ? (
                 (data?.rows as KodeRow[] | undefined)?.map((r) => (
-                  <tr key={r.kode} className="border-b border-border hover:bg-muted/30 transition-colors">
-                    <td className="px-3 py-2 font-mono text-[10px] font-medium">{r.kode || "—"}</td>
-                    <td className="px-3 py-2 max-w-[200px] truncate">{r.article || "—"}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{r.series || "—"}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{r.gender || "—"}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{r.tier ? `T${r.tier}` : "—"}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{r.pairs.toLocaleString("id-ID")}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{fmtRp(r.revenue)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{fmtRp(r.avg_price)}</td>
+                  <tr key={r.kode} className="border-b border-border/40 hover:bg-muted/20 transition-colors">
+                    <td className="px-3 py-2.5 font-mono text-[10px] font-medium">{r.kode || "—"}</td>
+                    <td className="px-3 py-2.5 max-w-[200px] truncate">{r.article || "—"}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground">{r.series || "—"}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground">{r.gender || "—"}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground">{r.tier ? `T${r.tier}` : "—"}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{r.pairs.toLocaleString("en-US")}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{fmtRp(r.revenue)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{fmtRp(r.avg_price)}</td>
                   </tr>
                 ))
               ) : (
                 (data?.rows as KodeBesarRow[] | undefined)?.map((r) => (
-                  <tr key={r.kode_besar} className="border-b border-border hover:bg-muted/30 transition-colors">
-                    <td className="px-3 py-2 font-mono text-[10px] font-medium">{r.kode_besar || "—"}</td>
-                    <td className="px-3 py-2 font-mono text-[10px]">{r.kode || "—"}</td>
-                    <td className="px-3 py-2 max-w-[200px] truncate">{r.article || "—"}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{r.size || "—"}</td>
-                    <td className="px-3 py-2 text-muted-foreground max-w-[120px] truncate">{r.color || "—"}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{r.tier ? `T${r.tier}` : "—"}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{r.pairs.toLocaleString("id-ID")}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{fmtRp(r.revenue)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{fmtRp(r.avg_price)}</td>
+                  <tr key={r.kode_besar} className="border-b border-border/40 hover:bg-muted/20 transition-colors">
+                    <td className="px-3 py-2.5 font-mono text-[10px] font-medium">{r.kode_besar || "—"}</td>
+                    <td className="px-3 py-2.5 font-mono text-[10px]">{r.kode || "—"}</td>
+                    <td className="px-3 py-2.5 max-w-[200px] truncate">{r.article || "—"}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground">{r.size || "—"}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground max-w-[120px] truncate">{r.color || "—"}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground">{r.tier ? `T${r.tier}` : "—"}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{r.pairs.toLocaleString("en-US")}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{fmtRp(r.revenue)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{fmtRp(r.avg_price)}</td>
                   </tr>
                 ))
               )}
               {!isLoading && !data?.rows?.length && (
                 <tr>
-                  <td colSpan={mode === "kode" ? 8 : 9} className="px-3 py-6 text-center text-muted-foreground">No data</td>
+                  <td colSpan={mode === "kode" ? 8 : 9} className="px-3 py-8 text-center text-muted-foreground">No data</td>
                 </tr>
               )}
             </tbody>
@@ -228,13 +277,13 @@ export default function DetailTable({ mode }: { mode: Mode }) {
 
       {data && data.pages > 1 && (
         <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>{data.total.toLocaleString("id-ID")} items · Page {page} of {data.pages}</span>
+          <span className="tabular-nums">{data.total.toLocaleString("en-US")} items · Page {page} of {data.pages}</span>
           <div className="flex gap-1">
             <button
               type="button"
               disabled={page <= 1}
               onClick={() => setPage(page - 1)}
-              className="px-2.5 py-1 rounded border border-border bg-card hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="px-3 py-1 rounded-sm border border-border bg-card hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-[10px] font-semibold"
             >
               Prev
             </button>
@@ -242,7 +291,7 @@ export default function DetailTable({ mode }: { mode: Mode }) {
               type="button"
               disabled={page >= data.pages}
               onClick={() => setPage(page + 1)}
-              className="px-2.5 py-1 rounded border border-border bg-card hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="px-3 py-1 rounded-sm border border-border bg-card hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-[10px] font-semibold"
             >
               Next
             </button>
