@@ -69,6 +69,16 @@ export default function HomeInner() {
     (tab: string) => {
       const params = new URLSearchParams(searchParams.toString());
       params.set("tab", tab);
+      
+      // Ensure date range is set for detail tabs
+      if ((tab === "detail" || tab === "detail-size") && !params.has("from")) {
+        params.set("from", "2026-01-01");
+      }
+      if ((tab === "detail" || tab === "detail-size") && !params.has("to")) {
+        const today = new Date().toISOString().substring(0, 10);
+        params.set("to", today);
+      }
+      
       router.push(`/?${params.toString()}`);
     },
     [router, searchParams]
