@@ -85,7 +85,7 @@ export default function HomeInner() {
   );
 
   const qs = searchParams.toString();
-  const dashboardUrl = `/api/dashboard${qs ? `?${qs}` : ""}`;
+  const dashboardUrl = `/api/dashboard?v=3&${qs ? `${qs}` : ""}`;
   const { data, isLoading } = useSWR<DashboardData>(dashboardUrl, fetcher, {
     revalidateOnFocus: false,
     keepPreviousData: true,
