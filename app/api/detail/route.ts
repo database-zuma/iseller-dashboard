@@ -13,31 +13,6 @@ function parseMulti(sp: URLSearchParams, key: string): string[] {
 const ALLOWED_SORT_KODE = new Set(["kode", "article", "series", "gender", "tier", "pairs", "revenue", "avg_price"]);
 const ALLOWED_SORT_KB = new Set(["kode_besar", "kode", "article", "size", "color", "tier", "pairs", "revenue", "avg_price"]);
 
-const EXCLUDE_ARTICLE = (alias: string) => `
-  (${alias}.article IS NULL OR (
-    ${alias}.article NOT ILIKE '%shopbag%'
-    AND ${alias}.article NOT ILIKE '%paperbag%'
-    AND ${alias}.article NOT ILIKE '%gwp%'
-    AND ${alias}.article NOT ILIKE '%gift%'
-    AND ${alias}.article NOT ILIKE '%voucher%'
-    AND ${alias}.article NOT ILIKE '%membership%'
-    AND ${alias}.article NOT ILIKE '%paper bag%'
-    AND ${alias}.article NOT ILIKE '%shopping bag%'
-    AND ${alias}.article NOT ILIKE '%hanger%'
-    AND ${alias}.kode_besar NOT ILIKE '%shopbag%'
-    AND ${alias}.kode_besar NOT ILIKE '%paperbag%'
-    AND ${alias}.kode_besar NOT ILIKE '%gwp%'
-    AND ${alias}.kode_besar NOT ILIKE '%gift%'
-    AND ${alias}.kode_besar NOT ILIKE '%voucher%'
-    AND ${alias}.kode_besar NOT ILIKE '%membership%'
-    AND ${alias}.kode_besar NOT ILIKE '%hanger%'
-    AND ${alias}.kode NOT ILIKE '%shopbag%'
-    AND ${alias}.kode NOT ILIKE '%paperbag%'
-    AND ${alias}.kode NOT ILIKE '%gwp%'
-    AND ${alias}.kode NOT ILIKE '%hanger%'
-  ))
-`;
-
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const mode = sp.get("mode") === "kode_besar" ? "kode_besar" : "kode";
@@ -55,7 +30,6 @@ export async function GET(req: NextRequest) {
     const vals: unknown[] = [];
     const conds: string[] = [];
     let i = 1;
-    let needsTipeJoin = false;
 
     const from = sp.get("from");
     const to = sp.get("to");
@@ -69,20 +43,13 @@ export async function GET(req: NextRequest) {
       ["gender",  "d.gender"],
       ["tier",    "d.tier"],
       ["color",   "d.color"],
+      ["tipe",    "d.tipe"],
     ] as [string, string][]) {
       const fv = parseMulti(sp, param);
       if (!fv.length) continue;
       const phs = fv.map(() => `$${i++}`).join(", ");
       conds.push(`${col} IN (${phs})`);
       vals.push(...fv);
-    }
-
-    const tipe = parseMulti(sp, "tipe");
-    if (tipe.length) {
-      const phs = tipe.map(() => `$${i++}`).join(", ");
-      conds.push(`k.tipe IN (${phs})`);
-      vals.push(...tipe);
-      needsTipeJoin = true;
     }
 
     const q = sp.get("q");
@@ -96,11 +63,6 @@ export async function GET(req: NextRequest) {
       i++;
     }
 
-    conds.push(EXCLUDE_ARTICLE("d"));
-
-    const join = needsTipeJoin
-      ? "JOIN portal.kodemix k ON d.kode_besar = k.kode_besar"
-      : "";
     const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
 
     let groupBy: string;
@@ -119,7 +81,7 @@ export async function GET(req: NextRequest) {
                SUM(d.pairs) AS pairs,
                SUM(d.revenue) AS revenue,
                CASE WHEN SUM(d.pairs) > 0 THEN SUM(d.revenue) / SUM(d.pairs) ELSE 0 END AS avg_price
-        FROM mart.iseller_daily d ${join}
+        FROM mart.mv_iseller_summary d
         ${where}
         GROUP BY ${groupBy}
         ORDER BY ${sort === "pairs" || sort === "revenue" || sort === "avg_price" ? sort : `d.${sort}`} ${dir} NULLS LAST
@@ -140,7 +102,7 @@ export async function GET(req: NextRequest) {
     const countSql = `
       SELECT COUNT(*) AS total FROM (
         SELECT ${groupBy}
-        FROM mart.iseller_daily d ${join}
+        FROM mart.mv_iseller_summary d
         ${where}
         GROUP BY ${groupBy}
       ) sub
@@ -150,7 +112,7 @@ export async function GET(req: NextRequest) {
              SUM(d.pairs) AS pairs,
              SUM(d.revenue) AS revenue,
              CASE WHEN SUM(d.pairs) > 0 THEN SUM(d.revenue) / SUM(d.pairs) ELSE 0 END AS avg_price
-      FROM mart.iseller_daily d ${join}
+      FROM mart.mv_iseller_summary d
       ${where}
       GROUP BY ${groupBy}
       ORDER BY ${sort === "pairs" || sort === "revenue" || sort === "avg_price" ? sort : `d.${sort}`} ${dir} NULLS LAST
@@ -176,7 +138,7 @@ export async function GET(req: NextRequest) {
       page,
       pages: Math.ceil(total / limit),
     }, {
-      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
+      headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=3600" },
     });
   } catch (e) {
     console.error("detail error:", e);

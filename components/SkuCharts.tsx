@@ -274,26 +274,26 @@ export default function SkuCharts({ data, loading }: { data?: SkuData; loading?:
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <PieChart
           title="Qty Sold by Tipe (Jepit vs Fashion)"
-          labels={data?.byTipe.map((d) => d.tipe || "Unknown") ?? []}
-          values={data?.byTipe.map((d) => d.pairs) ?? []}
+          labels={(data?.byTipe ?? []).filter((d) => d.tipe).map((d) => d.tipe)}
+          values={(data?.byTipe ?? []).filter((d) => d.tipe).map((d) => d.pairs)}
         />
         <PieChart
           title="Qty Sold by Gender"
-          labels={data?.byGender.map((d) => d.gender || "Unknown") ?? []}
-          values={data?.byGender.map((d) => d.pairs) ?? []}
+          labels={(data?.byGender ?? []).filter((d) => d.gender).map((d) => d.gender)}
+          values={(data?.byGender ?? []).filter((d) => d.gender).map((d) => d.pairs)}
         />
         <PieChart
           title="Qty Sold by Series"
-          labels={data?.bySeries.map((d) => d.series || "Unknown") ?? []}
-          values={data?.bySeries.map((d) => d.pairs) ?? []}
+          labels={(data?.bySeries ?? []).filter((d) => d.series).map((d) => d.series)}
+          values={(data?.bySeries ?? []).filter((d) => d.series).map((d) => d.pairs)}
         />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <BarChart
           title="Qty Sold by Size"
-          labels={data?.bySize.map((d) => d.size || "—") ?? []}
-          values={data?.bySize.map((d) => d.pairs) ?? []}
+          labels={(data?.bySize ?? []).filter((d) => d.size).map((d) => d.size)}
+          values={(data?.bySize ?? []).filter((d) => d.size).map((d) => d.pairs)}
         />
         <BarChart
           title="Qty Sold by Price Range (RSP)"
@@ -302,8 +302,8 @@ export default function SkuCharts({ data, loading }: { data?: SkuData; loading?:
         />
         <BarChart
           title="Qty Sold by Tier"
-          labels={data?.byTier.map((d) => `T${d.tier}`) ?? []}
-          values={data?.byTier.map((d) => d.pairs) ?? []}
+          labels={(data?.byTier ?? []).filter((d) => d.tier).map((d) => `T${d.tier}`)}
+          values={(data?.byTier ?? []).filter((d) => d.tier).map((d) => d.pairs)}
         />
       </div>
 

@@ -264,6 +264,7 @@ export default function FilterBar() {
             id="filter-from"
             type="date"
             value={fromVal}
+            max={toVal}
             onChange={(e) => setDate("from", e.target.value)}
             className="text-xs px-2 py-1.5 rounded-sm border border-border bg-card text-foreground outline-none focus:border-[#00E273] cursor-pointer"
           />
@@ -274,6 +275,8 @@ export default function FilterBar() {
             id="filter-to"
             type="date"
             value={toVal}
+            min={fromVal}
+            max={today}
             onChange={(e) => setDate("to", e.target.value)}
             className="text-xs px-2 py-1.5 rounded-sm border border-border bg-card text-foreground outline-none focus:border-[#00E273] cursor-pointer"
           />

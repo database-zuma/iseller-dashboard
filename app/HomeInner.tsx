@@ -50,6 +50,16 @@ interface DashboardData {
   rankByArticle: { article: string; kode_mix: string; pairs: number; revenue: number }[];
 }
 
+function formatLastUpdate(dateStr: string): string {
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const parts = dateStr.split("-");
+  if (parts.length !== 3) return dateStr;
+  const day = parseInt(parts[2], 10);
+  const month = months[parseInt(parts[1], 10) - 1] || parts[1];
+  const year = parts[0];
+  return `${day} ${month} ${year}`;
+}
+
 export default function HomeInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -69,6 +79,7 @@ export default function HomeInner() {
   const { data, isLoading } = useSWR<DashboardData>(dashboardUrl, fetcher, {
     revalidateOnFocus: false,
     keepPreviousData: true,
+    dedupingInterval: 60000,
   });
 
   return (
@@ -83,7 +94,7 @@ export default function HomeInner() {
             </div>
             {data?.lastUpdate && (
               <span className="text-[10px] text-muted-foreground tabular-nums bg-muted/60 px-2.5 py-1 rounded-sm border border-border">
-                Data as of <span className="font-semibold text-foreground">{data.lastUpdate}</span>
+                Last Update: <span className="font-semibold text-foreground">{formatLastUpdate(data.lastUpdate)}</span>
               </span>
             )}
           </div>
@@ -109,13 +120,15 @@ export default function HomeInner() {
           {activeTab === "summary" && (
             <div className="flex flex-col gap-4">
               <KpiCards kpis={data?.kpis} loading={isLoading} />
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <PeriodChart data={data?.timeSeries} loading={isLoading} />
-                <div className="h-64 lg:h-auto">
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-4">
+                <div className="flex flex-col gap-4">
+                  <PeriodChart data={data?.timeSeries} loading={isLoading} />
+                  <BranchPieChart data={data?.byBranch} loading={isLoading} />
+                </div>
+                <div className="lg:min-h-[500px]">
                   <StoreTable stores={data?.stores} loading={isLoading} />
                 </div>
               </div>
-              <BranchPieChart data={data?.byBranch} loading={isLoading} />
             </div>
           )}
           {activeTab === "sku" && (

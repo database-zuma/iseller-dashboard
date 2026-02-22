@@ -29,11 +29,11 @@ export default function StoreTable({ stores, loading }: { stores?: StoreRow[]; l
   const totalPages = Math.ceil(totalRows / ROWS_PER_PAGE);
   const currentRows = stores?.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE) ?? [];
 
-  const thClass = "text-left px-4 py-2.5 text-[9px] font-bold text-muted-foreground uppercase tracking-[0.12em]";
-  const thRight = `text-right px-4 py-2.5 text-[9px] font-bold text-muted-foreground uppercase tracking-[0.12em]`;
+  const thClass = "text-left px-3 py-2.5 text-[9px] font-bold text-muted-foreground uppercase tracking-[0.12em]";
+  const thRight = `text-right px-3 py-2.5 text-[9px] font-bold text-muted-foreground uppercase tracking-[0.12em]`;
 
   return (
-    <div className="bg-card border border-border rounded-sm overflow-hidden flex flex-col shadow-sm">
+    <div className="bg-card border border-border rounded-sm overflow-hidden flex flex-col shadow-sm h-full">
       <div className="px-5 py-3.5 border-b border-border flex items-center justify-between">
         <h3 className="text-[10px] font-bold text-foreground uppercase tracking-[0.15em]">Store Performance</h3>
         {!loading && totalRows > 0 && (
@@ -46,6 +46,7 @@ export default function StoreTable({ stores, loading }: { stores?: StoreRow[]; l
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-border bg-muted/30">
+              <th className={`text-center px-2 py-2.5 text-[9px] font-bold text-muted-foreground uppercase tracking-[0.12em] w-8`}>#</th>
               <th className={thClass}>Store</th>
               <th className={thClass}>Branch</th>
               <th className={thRight}>Qty</th>
@@ -60,29 +61,33 @@ export default function StoreTable({ stores, loading }: { stores?: StoreRow[]; l
             {loading ? (
               Array.from({ length: 8 }, (_, i) => (
                 <tr key={`skel-${String(i)}`} className="border-b border-border/50">
-                  {Array.from({ length: 8 }, (_, j) => (
-                    <td key={`sc-${String(j)}`} className="px-4 py-2.5">
+                  {Array.from({ length: 9 }, (_, j) => (
+                    <td key={`sc-${String(j)}`} className="px-3 py-2.5">
                       <div className="h-3 bg-muted animate-pulse rounded-sm w-full" />
                     </td>
                   ))}
                 </tr>
               ))
             ) : currentRows.length ? (
-              currentRows.map((s) => (
-                <tr key={s.toko} className="border-b border-border/40 hover:bg-muted/20 transition-colors">
-                  <td className="px-4 py-2.5 font-medium text-foreground max-w-[180px] truncate text-xs">{s.toko}</td>
-                  <td className="px-4 py-2.5 text-muted-foreground text-xs">{s.branch || "—"}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-xs">{Math.round(s.pairs).toLocaleString("en-US")}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-xs">{fmtRp(s.revenue)}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-xs text-muted-foreground">{s.transactions.toLocaleString("en-US")}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-xs text-muted-foreground">{s.atu.toFixed(1)}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-xs text-muted-foreground">{fmtRp(s.asp)}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-xs text-muted-foreground">{fmtRp(s.atv)}</td>
-                </tr>
-              ))
+              currentRows.map((s, idx) => {
+                const rank = (page - 1) * ROWS_PER_PAGE + idx + 1;
+                return (
+                  <tr key={s.toko} className="border-b border-border/40 hover:bg-muted/20 transition-colors">
+                    <td className="px-2 py-2.5 text-center tabular-nums text-xs text-muted-foreground font-medium">{rank}</td>
+                    <td className="px-3 py-2.5 font-medium text-foreground max-w-[180px] truncate text-xs">{s.toko}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground text-xs">{s.branch || "—"}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-xs">{Math.round(s.pairs).toLocaleString("en-US")}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-xs">{fmtRp(s.revenue)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-xs text-muted-foreground">{s.transactions.toLocaleString("en-US")}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-xs text-muted-foreground">{s.atu.toFixed(1)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-xs text-muted-foreground">{fmtRp(s.asp)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-xs text-muted-foreground">{fmtRp(s.atv)}</td>
+                  </tr>
+                );
+              })
             ) : (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground text-xs">No data</td>
+                <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground text-xs">No data</td>
               </tr>
             )}
           </tbody>

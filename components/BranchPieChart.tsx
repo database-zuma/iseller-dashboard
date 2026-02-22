@@ -56,7 +56,7 @@ export default function BranchPieChart({
   const total = data.reduce((s, d) => s + d.revenue, 0);
 
   const chartData = {
-    labels: data.map((d) => d.branch || "Unknown"),
+    labels: data.map((d) => d.branch || "Event"),
     datasets: [
       {
         data: data.map((d) => d.revenue),
@@ -114,7 +114,7 @@ export default function BranchPieChart({
             <tbody>
               {data.map((d) => (
                 <tr key={d.branch} className="border-b border-border/40">
-                  <td className="py-1.5 font-medium">{d.branch || "Unknown"}</td>
+                  <td className="py-1.5 font-medium">{d.branch || "Event"}</td>
                   <td className="py-1.5 text-right tabular-nums">{fmtRp(d.revenue)}</td>
                   <td className="py-1.5 text-right tabular-nums text-muted-foreground">
                     {total > 0 ? ((d.revenue / total) * 100).toFixed(1) : "0"}%

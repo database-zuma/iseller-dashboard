@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/db";
+import { getCached, setCache } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -10,40 +11,49 @@ function parseMulti(sp: URLSearchParams, key: string): string[] {
   return val.split(",").map((v) => v.trim()).filter(Boolean);
 }
 
-const EXCLUDE_ARTICLE = (alias: string) => `
-  (${alias}.article IS NULL OR (
-    ${alias}.article NOT ILIKE '%shopbag%'
-    AND ${alias}.article NOT ILIKE '%paperbag%'
-    AND ${alias}.article NOT ILIKE '%gwp%'
-    AND ${alias}.article NOT ILIKE '%gift%'
-    AND ${alias}.article NOT ILIKE '%voucher%'
-    AND ${alias}.article NOT ILIKE '%membership%'
-    AND ${alias}.article NOT ILIKE '%paper bag%'
-    AND ${alias}.article NOT ILIKE '%shopping bag%'
-    AND ${alias}.article NOT ILIKE '%hanger%'
-    AND ${alias}.kode_besar NOT ILIKE '%shopbag%'
-    AND ${alias}.kode_besar NOT ILIKE '%paperbag%'
-    AND ${alias}.kode_besar NOT ILIKE '%gwp%'
-    AND ${alias}.kode_besar NOT ILIKE '%gift%'
-    AND ${alias}.kode_besar NOT ILIKE '%voucher%'
-    AND ${alias}.kode_besar NOT ILIKE '%membership%'
-    AND ${alias}.kode_besar NOT ILIKE '%hanger%'
-    AND ${alias}.kode NOT ILIKE '%shopbag%'
-    AND ${alias}.kode NOT ILIKE '%paperbag%'
-    AND ${alias}.kode NOT ILIKE '%gwp%'
-    AND ${alias}.kode NOT ILIKE '%hanger%'
-  ))
-`;
-
-function buildBaseFilters(
+function buildMvFilters(
   sp: URLSearchParams,
   vals: unknown[],
   startIdx: number,
-  prefix = ""
+  prefix = "d"
 ): { conds: string[]; nextIdx: number } {
   const conds: string[] = [];
   let i = startIdx;
-  const p = prefix ? `${prefix}.` : "";
+  const p = `${prefix}.`;
+
+  const from = sp.get("from");
+  const to = sp.get("to");
+  if (from) { conds.push(`${p}sale_date >= $${i++}`); vals.push(from); }
+  if (to)   { conds.push(`${p}sale_date <= $${i++}`); vals.push(to); }
+
+  for (const [param, col] of [
+    ["branch", "branch"],
+    ["store",  "toko"],
+    ["series", "series"],
+    ["gender", "gender"],
+    ["tier",   "tier"],
+    ["color",  "color"],
+    ["tipe",   "tipe"],
+  ] as [string, string][]) {
+    const fv = parseMulti(sp, param);
+    if (!fv.length) continue;
+    const phs = fv.map(() => `$${i++}`).join(", ");
+    conds.push(`${p}${col} IN (${phs})`);
+    vals.push(...fv);
+  }
+
+  return { conds, nextIdx: i };
+}
+
+function buildTxnFilters(
+  sp: URLSearchParams,
+  vals: unknown[],
+  startIdx: number,
+  prefix = "t"
+): { conds: string[]; nextIdx: number } {
+  const conds: string[] = [];
+  let i = startIdx;
+  const p = `${prefix}.`;
 
   const from = sp.get("from");
   const to = sp.get("to");
@@ -67,54 +77,17 @@ function buildBaseFilters(
   return { conds, nextIdx: i };
 }
 
-function buildDailyFilters(
-  sp: URLSearchParams,
-  vals: unknown[],
-  startIdx: number,
-  prefix = ""
-): { conds: string[]; nextIdx: number } {
-  const { conds, nextIdx } = buildBaseFilters(sp, vals, startIdx, prefix);
-  let i = nextIdx;
-  const p = prefix ? `${prefix}.` : "";
-
-  for (const [param, col] of [
-    ["series", "series"],
-    ["gender", "gender"],
-    ["tier",   "tier"],
-    ["color",  "color"],
-  ] as [string, string][]) {
-    const fv = parseMulti(sp, param);
-    if (!fv.length) continue;
-    const phs = fv.map(() => `$${i++}`).join(", ");
-    conds.push(`${p}${col} IN (${phs})`);
-    vals.push(...fv);
-  }
-
-  conds.push(EXCLUDE_ARTICLE(prefix || "d"));
-
-  return { conds, nextIdx: i };
-}
-
-function addTipeFilter(
-  sp: URLSearchParams,
-  vals: unknown[],
-  startIdx: number,
-  conds: string[]
-): { nextIdx: number; needsJoin: boolean } {
-  let i = startIdx;
-  const tipe = parseMulti(sp, "tipe");
-  if (tipe.length) {
-    const phs = tipe.map(() => `$${i++}`).join(", ");
-    conds.push(`k.tipe IN (${phs})`);
-    vals.push(...tipe);
-    return { nextIdx: i, needsJoin: true };
-  }
-  return { nextIdx: i, needsJoin: false };
-}
-
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const period = sp.get("period") || "daily";
+  const cacheKey = `dashboard:${sp.toString()}`;
+
+  const cached = getCached<Record<string, unknown>>(cacheKey);
+  if (cached) {
+    return NextResponse.json(cached, {
+      headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=3600" },
+    });
+  }
 
   const periodExpr =
     period === "monthly" ? "DATE_TRUNC('month', d.sale_date)::DATE" :
@@ -122,58 +95,13 @@ export async function GET(req: NextRequest) {
                            "d.sale_date";
 
   try {
-    const dailyVals: unknown[] = [];
-    const { conds: dailyConds, nextIdx: dailyNext } = buildDailyFilters(sp, dailyVals, 1, "d");
-    const { needsJoin: dailyNeedsJoin } = addTipeFilter(sp, dailyVals, dailyNext, dailyConds);
-
-    const dailyJoin = dailyNeedsJoin
-      ? "JOIN portal.kodemix k ON d.kode_besar = k.kode_besar"
-      : "";
-    const dailyWhere = dailyConds.length ? `WHERE ${dailyConds.join(" AND ")}` : "";
+    const vals: unknown[] = [];
+    const { conds } = buildMvFilters(sp, vals, 1, "d");
+    const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
 
     const txnVals: unknown[] = [];
-    const { conds: txnConds } = buildBaseFilters(sp, txnVals, 1, "t");
+    const { conds: txnConds } = buildTxnFilters(sp, txnVals, 1, "t");
     const txnWhere = txnConds.length ? `WHERE ${txnConds.join(" AND ")}` : "";
-
-    const [kpiDaily, kpiTxn, lastUpdateRes] = await Promise.all([
-      pool.query(
-        `SELECT SUM(d.revenue) AS revenue, SUM(d.pairs) AS pairs
-         FROM mart.iseller_daily d ${dailyJoin} ${dailyWhere}`,
-        dailyVals
-      ),
-      pool.query(
-        `SELECT COUNT(*) AS transactions FROM mart.iseller_txn t ${txnWhere}`,
-        txnVals
-      ),
-      pool.query(`SELECT MAX(sale_date) AS last_date FROM mart.iseller_daily`),
-    ]);
-
-    const revenue = Number(kpiDaily.rows[0].revenue || 0);
-    const pairs = Number(kpiDaily.rows[0].pairs || 0);
-    const transactions = Number(kpiTxn.rows[0].transactions || 0);
-    const lastUpdate = lastUpdateRes.rows[0].last_date
-      ? String(lastUpdateRes.rows[0].last_date).substring(0, 10)
-      : null;
-    const kpis = {
-      revenue,
-      pairs,
-      transactions,
-      atu: transactions > 0 ? pairs / transactions : 0,
-      asp: pairs > 0 ? revenue / pairs : 0,
-      atv: transactions > 0 ? revenue / transactions : 0,
-    };
-
-    const tsRes = await pool.query(
-      `SELECT ${periodExpr} AS period, SUM(d.revenue) AS revenue, SUM(d.pairs) AS pairs
-       FROM mart.iseller_daily d ${dailyJoin} ${dailyWhere}
-       GROUP BY 1 ORDER BY 1`,
-      dailyVals
-    );
-    const timeSeries = tsRes.rows.map((r: Record<string, unknown>) => ({
-      period: String(r.period).substring(0, 10),
-      revenue: Number(r.revenue),
-      pairs: Number(r.pairs),
-    }));
 
     const storeVals: unknown[] = [];
     const storeD: string[] = [];
@@ -199,7 +127,7 @@ export async function GET(req: NextRequest) {
       storeVals.push(...store);
     }
 
-    for (const [param, col] of [["series","series"],["gender","gender"],["tier","tier"],["color","color"]] as [string,string][]) {
+    for (const [param, col] of [["series","series"],["gender","gender"],["tier","tier"],["color","color"],["tipe","tipe"]] as [string,string][]) {
       const fv = parseMulti(sp, param);
       if (!fv.length) continue;
       const phs = fv.map(() => `$${si++}`).join(", ");
@@ -207,43 +135,135 @@ export async function GET(req: NextRequest) {
       storeVals.push(...fv);
     }
 
-    storeD.push(EXCLUDE_ARTICLE("d"));
-
-    let storeNeedsTipeJoin = false;
-    const tipe = parseMulti(sp, "tipe");
-    if (tipe.length) {
-      const phs = tipe.map(() => `$${si++}`).join(", ");
-      storeD.push(`sk.tipe IN (${phs})`);
-      storeVals.push(...tipe);
-      storeNeedsTipeJoin = true;
-    }
-
-    const storeDJoin = storeNeedsTipeJoin
-      ? "JOIN portal.kodemix sk ON d.kode_besar = sk.kode_besar"
-      : "";
     const storeDWhere = storeD.length ? `WHERE ${storeD.join(" AND ")}` : "";
     const storeTWhere = storeT.length ? `WHERE ${storeT.join(" AND ")}` : "";
 
-    const storeRes = await pool.query(
-      `WITH daily_agg AS (
-        SELECT d.toko, SUM(d.pairs) AS pairs, SUM(d.revenue) AS revenue, MAX(d.branch) AS branch
-        FROM mart.iseller_daily d ${storeDJoin} ${storeDWhere}
-        GROUP BY d.toko
+    const tipeWhere = conds.length
+      ? `WHERE ${conds.join(" AND ")}`
+      : "";
+
+    const [
+      kpiRes, txnRes, lastUpdateRes, tsRes, storeRes,
+      branchRes, seriesRes, genderRes, tierRes,
+      tipeRes, sizeRes, priceRes, rankRes,
+    ] = await Promise.all([
+      pool.query(
+        `SELECT SUM(d.revenue) AS revenue, SUM(d.pairs) AS pairs
+         FROM mart.mv_iseller_summary d ${where}`,
+        vals
       ),
-      txn_agg AS (
-        SELECT t.toko, COUNT(*) AS transactions
-        FROM mart.iseller_txn t ${storeTWhere}
-        GROUP BY t.toko
-      )
-      SELECT a.toko, a.branch, a.pairs, a.revenue,
-             COALESCE(x.transactions, 0) AS transactions,
-             CASE WHEN COALESCE(x.transactions,0) > 0 THEN a.pairs / x.transactions ELSE 0 END AS atu,
-             CASE WHEN a.pairs > 0 THEN a.revenue / a.pairs ELSE 0 END AS asp,
-             CASE WHEN COALESCE(x.transactions,0) > 0 THEN a.revenue / x.transactions ELSE 0 END AS atv
-      FROM daily_agg a LEFT JOIN txn_agg x ON a.toko = x.toko
-      ORDER BY a.revenue DESC`,
-      storeVals
-    );
+      pool.query(
+        `SELECT SUM(t.txn_count) AS transactions FROM mart.mv_iseller_txn_agg t ${txnWhere}`,
+        txnVals
+      ),
+      pool.query(`SELECT MAX(sale_date)::TEXT AS last_date FROM mart.mv_iseller_summary`),
+      pool.query(
+        `SELECT ${periodExpr} AS period, SUM(d.revenue) AS revenue, SUM(d.pairs) AS pairs
+         FROM mart.mv_iseller_summary d ${where}
+         GROUP BY 1 ORDER BY 1`,
+        vals
+      ),
+      pool.query(
+        `WITH daily_agg AS (
+          SELECT d.toko, SUM(d.pairs) AS pairs, SUM(d.revenue) AS revenue, COALESCE(NULLIF(MAX(d.branch), ''), 'Event') AS branch
+          FROM mart.mv_iseller_summary d ${storeDWhere}
+          GROUP BY d.toko
+        ),
+        txn_agg AS (
+          SELECT t.toko, SUM(t.txn_count) AS transactions
+          FROM mart.mv_iseller_txn_agg t ${storeTWhere}
+          GROUP BY t.toko
+        )
+        SELECT a.toko, a.branch, a.pairs, a.revenue,
+               COALESCE(x.transactions, 0) AS transactions,
+               CASE WHEN COALESCE(x.transactions,0) > 0 THEN a.pairs / x.transactions ELSE 0 END AS atu,
+               CASE WHEN a.pairs > 0 THEN a.revenue / a.pairs ELSE 0 END AS asp,
+               CASE WHEN COALESCE(x.transactions,0) > 0 THEN a.revenue / x.transactions ELSE 0 END AS atv
+        FROM daily_agg a LEFT JOIN txn_agg x ON a.toko = x.toko
+        ORDER BY a.revenue DESC`,
+        storeVals
+      ),
+      pool.query(
+        `SELECT COALESCE(NULLIF(d.branch, ''), 'Event') AS branch, SUM(d.revenue) AS revenue
+         FROM mart.mv_iseller_summary d ${where}
+         GROUP BY d.branch ORDER BY revenue DESC NULLS LAST`,
+        vals
+      ),
+      pool.query(
+        `SELECT d.series, SUM(d.pairs) AS pairs
+         FROM mart.mv_iseller_summary d ${where}
+         GROUP BY d.series ORDER BY pairs DESC NULLS LAST`,
+        vals
+      ),
+      pool.query(
+        `SELECT d.gender, SUM(d.pairs) AS pairs
+         FROM mart.mv_iseller_summary d ${where}
+         GROUP BY d.gender ORDER BY pairs DESC NULLS LAST`,
+        vals
+      ),
+      pool.query(
+        `SELECT d.tier, SUM(d.pairs) AS pairs
+         FROM mart.mv_iseller_summary d ${where}
+         GROUP BY d.tier ORDER BY d.tier ASC NULLS LAST`,
+        vals
+      ),
+      pool.query(
+        `SELECT d.tipe, SUM(d.pairs) AS pairs
+         FROM mart.mv_iseller_summary d ${tipeWhere}
+         GROUP BY d.tipe ORDER BY pairs DESC NULLS LAST`,
+        vals
+      ),
+      pool.query(
+        `SELECT d.size, SUM(d.pairs) AS pairs
+         FROM mart.mv_iseller_summary d ${where}
+         GROUP BY d.size ORDER BY pairs DESC NULLS LAST`,
+        vals
+      ),
+      pool.query(
+        `SELECT
+           CASE WHEN SUM(d.pairs) > 0 THEN ROUND(SUM(d.revenue) / SUM(d.pairs))
+             ELSE 0
+           END AS price_bucket,
+           SUM(d.pairs) AS pairs
+         FROM mart.mv_iseller_summary d ${where}
+         GROUP BY d.kode
+         HAVING SUM(d.pairs) > 0
+         ORDER BY price_bucket ASC`,
+        vals
+      ),
+      pool.query(
+        `SELECT
+           COALESCE(d.article, d.kode_besar) AS article,
+           d.kode_mix,
+           SUM(d.pairs) AS pairs,
+           SUM(d.revenue) AS revenue
+         FROM mart.mv_iseller_summary d ${where}
+         GROUP BY d.article, d.kode_besar, d.kode_mix
+         ORDER BY revenue DESC NULLS LAST
+         LIMIT 100`,
+        vals
+      ),
+    ]);
+
+    const revenue = Number(kpiRes.rows[0].revenue || 0);
+    const pairs = Number(kpiRes.rows[0].pairs || 0);
+    const transactions = Number(txnRes.rows[0].transactions || 0);
+    const lastUpdate = lastUpdateRes.rows[0].last_date || null;
+    const kpis = {
+      revenue,
+      pairs,
+      transactions,
+      atu: transactions > 0 ? pairs / transactions : 0,
+      asp: pairs > 0 ? revenue / pairs : 0,
+      atv: transactions > 0 ? revenue / transactions : 0,
+    };
+
+    const timeSeries = tsRes.rows.map((r: Record<string, unknown>) => ({
+      period: String(r.period).substring(0, 10),
+      revenue: Number(r.revenue),
+      pairs: Number(r.pairs),
+    }));
+
     const stores = storeRes.rows.map((r: Record<string, unknown>) => ({
       toko: r.toko,
       branch: r.branch,
@@ -254,77 +274,6 @@ export async function GET(req: NextRequest) {
       asp: Number(r.asp),
       atv: Number(r.atv),
     }));
-
-    const skuJoin = dailyNeedsJoin
-      ? "JOIN portal.kodemix k ON d.kode_besar = k.kode_besar"
-      : "LEFT JOIN portal.kodemix k ON d.kode_besar = k.kode_besar";
-
-    const [
-      branchRes, seriesRes, genderRes, tierRes,
-      tipeRes, sizeRes, priceRes, rankRes,
-    ] = await Promise.all([
-      pool.query(
-        `SELECT d.branch, SUM(d.revenue) AS revenue
-         FROM mart.iseller_daily d ${dailyJoin} ${dailyWhere}
-         GROUP BY d.branch ORDER BY revenue DESC NULLS LAST`,
-        dailyVals
-      ),
-      pool.query(
-        `SELECT d.series, SUM(d.pairs) AS pairs
-         FROM mart.iseller_daily d ${dailyJoin} ${dailyWhere}
-         GROUP BY d.series ORDER BY pairs DESC NULLS LAST`,
-        dailyVals
-      ),
-      pool.query(
-        `SELECT d.gender, SUM(d.pairs) AS pairs
-         FROM mart.iseller_daily d ${dailyJoin} ${dailyWhere}
-         GROUP BY d.gender ORDER BY pairs DESC NULLS LAST`,
-        dailyVals
-      ),
-      pool.query(
-        `SELECT d.tier, SUM(d.pairs) AS pairs
-         FROM mart.iseller_daily d ${dailyJoin} ${dailyWhere}
-         GROUP BY d.tier ORDER BY d.tier ASC NULLS LAST`,
-        dailyVals
-      ),
-      pool.query(
-        `SELECT k.tipe, SUM(d.pairs) AS pairs
-         FROM mart.iseller_daily d ${skuJoin} ${dailyWhere}
-         GROUP BY k.tipe ORDER BY pairs DESC NULLS LAST`,
-        dailyVals
-      ),
-      pool.query(
-        `SELECT d.size, SUM(d.pairs) AS pairs
-         FROM mart.iseller_daily d ${dailyJoin} ${dailyWhere}
-         GROUP BY d.size ORDER BY pairs DESC NULLS LAST`,
-        dailyVals
-      ),
-      pool.query(
-        `SELECT
-           CASE
-             WHEN SUM(d.pairs) > 0 THEN ROUND(SUM(d.revenue) / SUM(d.pairs))
-             ELSE 0
-           END AS price_bucket,
-           SUM(d.pairs) AS pairs
-         FROM mart.iseller_daily d ${dailyJoin} ${dailyWhere}
-         GROUP BY d.kode
-         HAVING SUM(d.pairs) > 0
-         ORDER BY price_bucket ASC`,
-        dailyVals
-      ),
-      pool.query(
-        `SELECT
-           COALESCE(d.article, d.kode_besar) AS article,
-           d.kode_mix,
-           SUM(d.pairs) AS pairs,
-           SUM(d.revenue) AS revenue
-         FROM mart.iseller_daily d ${dailyJoin} ${dailyWhere}
-         GROUP BY d.article, d.kode_besar, d.kode_mix
-         ORDER BY revenue DESC NULLS LAST
-         LIMIT 100`,
-        dailyVals
-      ),
-    ]);
 
     const mapNum = (rows: Record<string, unknown>[], ...keys: string[]) =>
       rows.map((r) => {
@@ -354,7 +303,7 @@ export async function GET(req: NextRequest) {
       if (sum > 0) priceBuckets.push({ label, pairs: sum });
     }
 
-    return NextResponse.json({
+    const body = {
       kpis,
       lastUpdate,
       timeSeries,
@@ -367,8 +316,12 @@ export async function GET(req: NextRequest) {
       bySize:      mapNum(sizeRes.rows, "pairs"),
       byPrice:     priceBuckets,
       rankByArticle: mapNum(rankRes.rows, "pairs", "revenue"),
-    }, {
-      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
+    };
+
+    setCache(cacheKey, body);
+
+    return NextResponse.json(body, {
+      headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=3600" },
     });
   } catch (e) {
     console.error("dashboard error:", e);

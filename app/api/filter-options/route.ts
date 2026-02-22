@@ -31,7 +31,7 @@ function buildWhereClause(
     ["series", "d.series"],
     ["color",  "d.color"],
     ["tier",   "d.tier"],
-    ["tipe",   "k.tipe"],
+    ["tipe",   "d.tipe"],
   ] as [string, string][]) {
     if (param === skipParam) continue;
     const fv = parseMulti(sp, param);
@@ -48,44 +48,31 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
 
   try {
-    const dailyDims = [
-      { key: "branches", col: "d.branch",  param: "branch", nullFilter: "d.branch IS NOT NULL AND d.branch != ''" },
+    const dims = [
+      { key: "branches", col: "d.branch",  param: "branch", nullFilter: "d.branch IS NOT NULL" },
       { key: "stores",   col: "d.toko",    param: "store",  nullFilter: "d.toko IS NOT NULL AND d.toko != ''" },
-      { key: "genders",  col: "d.gender",  param: "gender", nullFilter: "d.gender IS NOT NULL AND d.gender != ''" },
-      { key: "series",   col: "d.series",  param: "series", nullFilter: "d.series IS NOT NULL AND d.series != ''" },
+      { key: "genders",  col: "d.gender",  param: "gender", nullFilter: "d.gender IS NOT NULL" },
+      { key: "series",   col: "d.series",  param: "series", nullFilter: "d.series IS NOT NULL" },
       { key: "colors",   col: "d.color",   param: "color",  nullFilter: "d.color IS NOT NULL AND d.color != ''" },
-      { key: "tiers",    col: "d.tier",    param: "tier",   nullFilter: "d.tier IS NOT NULL AND d.tier != ''" },
+      { key: "tiers",    col: "d.tier",    param: "tier",   nullFilter: "d.tier IS NOT NULL" },
+      { key: "tipes",    col: "d.tipe",    param: "tipe",   nullFilter: "d.tipe IS NOT NULL" },
     ] as const;
 
-    const needsTipeJoin = parseMulti(sp, "tipe").length > 0;
-
     const results = await Promise.all(
-      dailyDims.map(async (dim) => {
+      dims.map(async (dim) => {
         const vals: unknown[] = [];
         const { conds } = buildWhereClause(sp, dim.param, vals, 1);
         conds.push(dim.nullFilter);
 
-        const join = needsTipeJoin
-          ? "LEFT JOIN portal.kodemix k ON d.kode_besar = k.kode_besar"
-          : "";
-
         const where = conds.length > 0 ? `WHERE ${conds.join(" AND ")}` : "";
-        const sql = `SELECT DISTINCT ${dim.col} AS val FROM mart.iseller_daily d ${join} ${where} ORDER BY val`;
+        const sql = `SELECT DISTINCT ${dim.col} AS val FROM mart.mv_iseller_summary d ${where} ORDER BY val`;
         const res = await pool.query(sql, vals);
-        return { key: dim.key, values: res.rows.map((r: Record<string, unknown>) => r.val).filter(Boolean) };
+        return { key: dim.key, values: res.rows.map((r: Record<string, unknown>) => r.val).filter((v) => v !== null && v !== '') };
       })
     );
 
-    const tipeVals: unknown[] = [];
-    const { conds: tipeConds } = buildWhereClause(sp, "tipe", tipeVals, 1);
-    tipeConds.push("k.tipe IS NOT NULL AND k.tipe != ''");
-    const tipeWhere = tipeConds.length > 0 ? `WHERE ${tipeConds.join(" AND ")}` : "";
-    const tipeSql = `SELECT DISTINCT k.tipe AS val FROM mart.iseller_daily d JOIN portal.kodemix k ON d.kode_besar = k.kode_besar ${tipeWhere} ORDER BY val`;
-    const tipeRes = await pool.query(tipeSql, tipeVals);
-
     const body: Record<string, unknown[]> = {};
     for (const r of results) body[r.key] = r.values;
-    body.tipes = tipeRes.rows.map((r: Record<string, unknown>) => r.val).filter(Boolean);
 
     return NextResponse.json(body, {
       headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=3600" },
