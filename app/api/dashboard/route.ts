@@ -10,6 +10,29 @@ function parseMulti(sp: URLSearchParams, key: string): string[] {
   return val.split(",").map((v) => v.trim()).filter(Boolean);
 }
 
+// Exclude non-product items like shopbag, paperbag, GWP, etc.
+const EXCLUDE_ARTICLE_CONDITION = `
+  (article IS NULL OR (
+    article NOT ILIKE '%shopbag%' 
+    AND article NOT ILIKE '%paperbag%'
+    AND article NOT ILIKE '%gwp%'
+    AND article NOT ILIKE '%gift%'
+    AND article NOT ILIKE '%voucher%'
+    AND article NOT ILIKE '%membership%'
+    AND article NOT ILIKE '%paper bag%'
+    AND article NOT ILIKE '%shopping bag%'
+    AND kode_besar NOT ILIKE '%shopbag%'
+    AND kode_besar NOT ILIKE '%paperbag%'
+    AND kode_besar NOT ILIKE '%gwp%'
+    AND kode_besar NOT ILIKE '%gift%'
+    AND kode_besar NOT ILIKE '%voucher%'
+    AND kode_besar NOT ILIKE '%membership%'
+    AND kode NOT ILIKE '%shopbag%'
+    AND kode NOT ILIKE '%paperbag%'
+    AND kode NOT ILIKE '%gwp%'
+  ))
+`;
+
 function buildFilters(
   sp: URLSearchParams,
   vals: unknown[],
@@ -78,6 +101,9 @@ function buildDailyFilters(
     vals.push(...payment);
   }
 
+  // Add exclusion for non-product items
+  conds.push(EXCLUDE_ARTICLE_CONDITION);
+
   return { conds, nextIdx: i };
 }
 
@@ -91,7 +117,7 @@ export async function GET(req: NextRequest) {
                            "sale_date";
 
   try {
-    // ── Daily filters (for iseller_daily queries)
+    // ── Daily filters (for iseller_daily queries) - includes article exclusion
     const dailyVals: unknown[] = [];
     const { conds: dailyConds } = buildDailyFilters(sp, dailyVals, 1);
     const dailyWhere = dailyConds.length ? `WHERE ${dailyConds.join(" AND ")}` : "";
@@ -218,6 +244,9 @@ export async function GET(req: NextRequest) {
       storeVals.push(...payment);
     }
 
+    // Add article exclusion for daily_agg
+    storeD.push(EXCLUDE_ARTICLE_CONDITION.replace(/d\./g, "d."));
+
     const storeDWhere = storeD.length ? `WHERE ${storeD.join(" AND ")}` : "";
     const storeTWhere = storeT.length ? `WHERE ${storeT.join(" AND ")}` : "";
 
@@ -260,7 +289,7 @@ export async function GET(req: NextRequest) {
       atv: Number(r.atv),
     }));
 
-    // ── 4. SKU breakdowns (from mart.iseller_daily with all filters)
+    // ── 4. SKU breakdowns (from mart.iseller_daily with all filters including exclusion)
     const [seriesRes, genderRes, tierRes, topRes] = await Promise.all([
       pool.query(
         `SELECT series, SUM(revenue) AS revenue, SUM(pairs) AS pairs

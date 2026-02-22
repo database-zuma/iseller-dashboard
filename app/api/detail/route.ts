@@ -13,6 +13,29 @@ function parseMulti(sp: URLSearchParams, key: string): string[] {
 const ALLOWED_SORT_KODE = new Set(["kode", "article", "series", "gender", "tier", "pairs", "revenue", "avg_price"]);
 const ALLOWED_SORT_KB = new Set(["kode_besar", "kode", "article", "size", "color", "tier", "pairs", "revenue", "avg_price"]);
 
+// Exclude non-product items like shopbag, paperbag, GWP, etc.
+const EXCLUDE_ARTICLE_CONDITION = `
+  (article IS NULL OR (
+    article NOT ILIKE '%shopbag%' 
+    AND article NOT ILIKE '%paperbag%'
+    AND article NOT ILIKE '%gwp%'
+    AND article NOT ILIKE '%gift%'
+    AND article NOT ILIKE '%voucher%'
+    AND article NOT ILIKE '%membership%'
+    AND article NOT ILIKE '%paper bag%'
+    AND article NOT ILIKE '%shopping bag%'
+    AND kode_besar NOT ILIKE '%shopbag%'
+    AND kode_besar NOT ILIKE '%paperbag%'
+    AND kode_besar NOT ILIKE '%gwp%'
+    AND kode_besar NOT ILIKE '%gift%'
+    AND kode_besar NOT ILIKE '%voucher%'
+    AND kode_besar NOT ILIKE '%membership%'
+    AND kode NOT ILIKE '%shopbag%'
+    AND kode NOT ILIKE '%paperbag%'
+    AND kode NOT ILIKE '%gwp%'
+  ))
+`;
+
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const mode = sp.get("mode") === "kode_besar" ? "kode_besar" : "kode";
@@ -60,6 +83,9 @@ export async function GET(req: NextRequest) {
       vals.push(`%${q}%`);
       i++;
     }
+
+    // Add exclusion for non-product items
+    conds.push(EXCLUDE_ARTICLE_CONDITION);
 
     const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
 
