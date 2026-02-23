@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { toCSV, downloadCSV, downloadXLSX } from "@/lib/export";
 
 interface StoreRow {
   toko: string;
@@ -35,7 +36,45 @@ export default function StoreTable({ stores, loading }: { stores?: StoreRow[]; l
   return (
     <div className="bg-card border border-border rounded-sm overflow-hidden flex flex-col shadow-sm h-full">
       <div className="px-5 py-3.5 border-b border-border flex items-center justify-between">
-        <h3 className="text-[10px] font-bold text-foreground uppercase tracking-[0.15em]">Store Performance</h3>
+        <div className="flex items-center gap-2.5">
+          <h3 className="text-[10px] font-bold text-foreground uppercase tracking-[0.15em]">Store Performance</h3>
+          {!loading && stores && stores.length > 0 && (
+            <div className="flex gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const headers = ["#", "Store", "Branch", "Qty", "Revenue", "Txn", "ATU", "ASP", "ATV"];
+                  const keys = ["rank", "toko", "branch", "pairs", "revenue", "transactions", "atu", "asp", "atv"];
+                  const rows: Record<string, unknown>[] = (stores ?? []).map((s, idx) => ({
+                    rank: idx + 1, toko: s.toko, branch: s.branch, pairs: s.pairs,
+                    revenue: s.revenue, transactions: s.transactions,
+                    atu: Number(s.atu.toFixed(1)), asp: Math.round(s.asp), atv: Math.round(s.atv),
+                  }));
+                  downloadCSV(toCSV(headers, rows, keys), "store_performance.csv");
+                }}
+                className="text-[9px] px-2 py-0.5 rounded-sm border border-border hover:bg-muted transition-colors font-medium"
+              >
+                CSV
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const headers = ["#", "Store", "Branch", "Qty", "Revenue", "Txn", "ATU", "ASP", "ATV"];
+                  const keys = ["rank", "toko", "branch", "pairs", "revenue", "transactions", "atu", "asp", "atv"];
+                  const rows: Record<string, unknown>[] = (stores ?? []).map((s, idx) => ({
+                    rank: idx + 1, toko: s.toko, branch: s.branch, pairs: s.pairs,
+                    revenue: s.revenue, transactions: s.transactions,
+                    atu: Number(s.atu.toFixed(1)), asp: Math.round(s.asp), atv: Math.round(s.atv),
+                  }));
+                  void downloadXLSX(headers, rows, keys, "store_performance.xlsx");
+                }}
+                className="text-[9px] px-2 py-0.5 rounded-sm border border-border hover:bg-muted transition-colors font-medium"
+              >
+                XLSX
+              </button>
+            </div>
+          )}
+        </div>
         {!loading && totalRows > 0 && (
           <span className="text-[10px] text-muted-foreground tabular-nums">
             {totalRows} stores · Page {page}/{totalPages}

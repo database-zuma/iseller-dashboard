@@ -84,6 +84,21 @@ export default function HomeInner() {
     [router, searchParams]
   );
 
+  const handleChartFilter = useCallback(
+    (param: string, value: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      const current = params.get(param);
+      if (current === value) {
+        params.delete(param);
+      } else {
+        params.set(param, value);
+      }
+      params.delete("page");
+      router.push(`/?${params.toString()}`);
+    },
+    [router, searchParams]
+  );
+
   const apiParams = new URLSearchParams(searchParams.toString());
   if (!apiParams.has("from")) apiParams.set("from", "2026-01-01");
   if (!apiParams.has("to")) apiParams.set("to", new Date().toISOString().substring(0, 10));
@@ -135,7 +150,7 @@ export default function HomeInner() {
               <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-4">
                 <div className="flex flex-col gap-4">
                   <PeriodChart data={data?.timeSeries} loading={isLoading} />
-                  <BranchPieChart data={data?.byBranch} loading={isLoading} />
+                  <BranchPieChart data={data?.byBranch} loading={isLoading} onChartFilter={handleChartFilter} />
                 </div>
                 <div className="lg:min-h-[500px]">
                   <StoreTable stores={data?.stores} loading={isLoading} />
@@ -156,6 +171,7 @@ export default function HomeInner() {
                 kpis: data?.kpis,
               }}
               loading={isLoading}
+              onChartFilter={handleChartFilter}
             />
           )}
 

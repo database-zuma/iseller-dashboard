@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -11,6 +12,7 @@ import {
   Legend,
 } from "chart.js";
 import { Bar, Pie } from "react-chartjs-2";
+import { toCSV, downloadCSV, downloadXLSX } from "@/lib/export";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Title, Tooltip, Legend);
 
@@ -41,6 +43,13 @@ const PIE_PALETTE = [
   "#3D3D3D",
 ];
 
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 function fmtNum(n: number): string {
   return Math.round(n).toLocaleString("en-US");
 }
@@ -51,12 +60,43 @@ function fmtRp(n: number): string {
   return `Rp ${Math.round(n).toLocaleString("en-US")}`;
 }
 
-function ChartCard({ children, title }: { children: React.ReactNode; title: string }) {
+function ChartCard({
+  children,
+  title,
+  filterLabel,
+  onClearFilter,
+  actions,
+}: {
+  children: React.ReactNode;
+  title: string;
+  filterLabel?: string;
+  onClearFilter?: () => void;
+  actions?: React.ReactNode;
+}) {
   return (
     <div className="bg-card border border-border rounded-sm p-4 shadow-sm">
-      <h3 className="text-[10px] font-bold text-foreground uppercase tracking-[0.15em] mb-3 border-b border-border pb-2">
-        {title}
-      </h3>
+      <div className="flex items-center justify-between mb-3 border-b border-border pb-2">
+        <h3 className="text-[10px] font-bold text-foreground uppercase tracking-[0.15em]">
+          {title}
+        </h3>
+        {actions}
+      </div>
+      {filterLabel && (
+        <div className="flex items-center gap-1.5 mb-2">
+          <span className="inline-flex items-center gap-1 text-[9px] px-2 py-0.5 rounded-sm bg-[#00E273]/10 text-[#002A3A] border border-[#00E273]/30 font-medium">
+            🔍 {filterLabel}
+            {onClearFilter && (
+              <button
+                type="button"
+                onClick={onClearFilter}
+                className="ml-0.5 hover:text-red-600 transition-colors"
+              >
+                ✕
+              </button>
+            )}
+          </span>
+        </div>
+      )}
       {children}
     </div>
   );
@@ -74,21 +114,33 @@ function PieChart({
   labels,
   values,
   title,
+  onSegmentClick,
+  activeValue,
 }: {
   labels: string[];
   values: number[];
   title: string;
+  onSegmentClick?: (label: string) => void;
+  activeValue?: string;
 }) {
   const total = values.reduce((s, v) => s + v, 0);
+  const activeIdx = activeValue ? labels.indexOf(activeValue) : -1;
+
+  const bgColors = PIE_PALETTE.slice(0, labels.length).map((color, i) => {
+    if (activeIdx >= 0 && i !== activeIdx) return hexToRgba(color, 0.4);
+    return color;
+  });
 
   const chartData = {
     labels,
     datasets: [
       {
         data: values,
-        backgroundColor: PIE_PALETTE.slice(0, labels.length),
-        borderWidth: 1,
-        borderColor: "#fff",
+        backgroundColor: bgColors,
+        borderWidth: labels.map((_, i) => (activeIdx >= 0 && i === activeIdx ? 3 : 1)),
+        borderColor: labels.map((_, i) =>
+          activeIdx >= 0 && i === activeIdx ? ZUMA_TEAL : "#fff"
+        ),
       },
     ],
   };
@@ -96,6 +148,13 @@ function PieChart({
   const options = {
     responsive: true,
     maintainAspectRatio: false,
+    onClick: onSegmentClick
+      ? (_event: unknown, elements: { index: number }[]) => {
+          if (elements.length > 0) {
+            onSegmentClick(labels[elements[0].index]);
+          }
+        }
+      : undefined,
     plugins: {
       legend: {
         position: "right" as const,
@@ -118,8 +177,12 @@ function PieChart({
   };
 
   return (
-    <ChartCard title={title}>
-      <div className="h-52 flex items-center justify-center">
+    <ChartCard
+      title={title}
+      filterLabel={activeIdx >= 0 ? activeValue : undefined}
+      onClearFilter={activeIdx >= 0 && onSegmentClick ? () => onSegmentClick(activeValue!) : undefined}
+    >
+      <div className={`h-52 flex items-center justify-center ${onSegmentClick ? "cursor-pointer" : ""}`}>
         <div className="h-full w-full max-w-[300px]">
           <Pie data={chartData} options={options} />
         </div>
@@ -133,28 +196,47 @@ function BarChart({
   values,
   title,
   horizontal,
+  onSegmentClick,
+  activeValue,
 }: {
   labels: string[];
   values: number[];
   title: string;
   horizontal?: boolean;
+  onSegmentClick?: (label: string) => void;
+  activeValue?: string;
 }) {
+  const activeIdx = activeValue ? labels.indexOf(activeValue) : -1;
+
+  const bgColors = activeIdx >= 0
+    ? labels.map((_, i) => (i === activeIdx ? ZUMA_TEAL : hexToRgba(ZUMA_GREEN, 0.4)))
+    : ZUMA_GREEN;
+
   const chartData = {
     labels,
     datasets: [
       {
         data: values,
-        backgroundColor: ZUMA_GREEN,
+        backgroundColor: bgColors,
         borderRadius: 1,
       },
     ],
   };
+
+  const handleBarClick = onSegmentClick
+    ? (_event: unknown, elements: { index: number }[]) => {
+        if (elements.length > 0) {
+          onSegmentClick(labels[elements[0].index]);
+        }
+      }
+    : undefined;
 
   const options = horizontal
     ? {
         responsive: true,
         maintainAspectRatio: false,
         indexAxis: "y" as const,
+        onClick: handleBarClick,
         plugins: {
           legend: { display: false },
           tooltip: {
@@ -175,6 +257,7 @@ function BarChart({
     : {
         responsive: true,
         maintainAspectRatio: false,
+        onClick: handleBarClick,
         plugins: {
           legend: { display: false },
           tooltip: {
@@ -194,8 +277,12 @@ function BarChart({
       };
 
   return (
-    <ChartCard title={title}>
-      <div className="h-52">
+    <ChartCard
+      title={title}
+      filterLabel={activeIdx >= 0 ? activeValue : undefined}
+      onClearFilter={activeIdx >= 0 && onSegmentClick ? () => onSegmentClick(activeValue!) : undefined}
+    >
+      <div className={`h-52 ${onSegmentClick ? "cursor-pointer" : ""}`}>
         <Bar data={chartData} options={options} />
       </div>
     </ChartCard>
@@ -209,8 +296,54 @@ function RankTable({
   rows: { article: string; kode_mix: string; gender?: string; series?: string; color?: string; pairs: number; revenue: number }[];
   grandTotals?: { pairs: number; revenue: number };
 }) {
+  const exportHeaders = ["#", "Kode Mix", "Gender", "Series", "Color", "Qty Sold", "Revenue", "ASP"];
+  const exportKeys = ["rank", "kode_mix", "gender", "series", "color", "pairs", "revenue", "asp"];
+
+  const getExportRows = (): Record<string, unknown>[] =>
+    rows.map((r, idx) => ({
+      rank: idx + 1,
+      kode_mix: r.kode_mix || r.article || "",
+      gender: r.gender || "",
+      series: r.series || "",
+      color: r.color || "",
+      pairs: r.pairs,
+      revenue: r.revenue,
+      asp: r.pairs > 0 ? Math.round(r.revenue / r.pairs) : 0,
+    }));
+
+  const handleCSV = () => {
+    const csv = toCSV(exportHeaders, getExportRows(), exportKeys);
+    downloadCSV(csv, "rank_by_article.csv");
+  };
+
+  const handleXLSX = () => {
+    void downloadXLSX(exportHeaders, getExportRows(), exportKeys, "rank_by_article.xlsx");
+  };
+
   return (
-    <ChartCard title="Rank by Article">
+    <ChartCard
+      title="Rank by Article"
+      actions={
+        rows.length > 0 ? (
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={handleCSV}
+              className="text-[9px] px-2 py-0.5 rounded-sm border border-border hover:bg-muted transition-colors font-medium"
+            >
+              CSV
+            </button>
+            <button
+              type="button"
+              onClick={handleXLSX}
+              className="text-[9px] px-2 py-0.5 rounded-sm border border-border hover:bg-muted transition-colors font-medium"
+            >
+              XLSX
+            </button>
+          </div>
+        ) : undefined
+      }
+    >
       <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
         <table className="w-full text-xs">
           <thead className="sticky top-0 bg-card">
@@ -268,7 +401,22 @@ function RankTable({
   );
 }
 
-export default function SkuCharts({ data, loading }: { data?: SkuData; loading?: boolean }) {
+export default function SkuCharts({
+  data,
+  loading,
+  onChartFilter,
+}: {
+  data?: SkuData;
+  loading?: boolean;
+  onChartFilter?: (param: string, value: string) => void;
+}) {
+  const searchParams = useSearchParams();
+  const activeTipe = searchParams.get("tipe") || undefined;
+  const activeGender = searchParams.get("gender") || undefined;
+  const activeSeries = searchParams.get("series") || undefined;
+  const activeTierParam = searchParams.get("tier");
+  const activeTierLabel = activeTierParam ? `T${activeTierParam}` : undefined;
+
   if (loading) {
     return (
       <div className="flex flex-col gap-4">
@@ -300,16 +448,22 @@ export default function SkuCharts({ data, loading }: { data?: SkuData; loading?:
           title="Qty Sold by Tipe (Jepit vs Fashion)"
           labels={(data?.byTipe ?? []).filter((d) => d.tipe).map((d) => d.tipe)}
           values={(data?.byTipe ?? []).filter((d) => d.tipe).map((d) => d.pairs)}
+          activeValue={activeTipe}
+          onSegmentClick={onChartFilter ? (label: string) => onChartFilter("tipe", label) : undefined}
         />
         <PieChart
           title="Qty Sold by Gender"
           labels={(data?.byGender ?? []).filter((d) => d.gender).map((d) => d.gender)}
           values={(data?.byGender ?? []).filter((d) => d.gender).map((d) => d.pairs)}
+          activeValue={activeGender}
+          onSegmentClick={onChartFilter ? (label: string) => onChartFilter("gender", label) : undefined}
         />
         <PieChart
           title="Qty Sold by Series"
           labels={(data?.bySeries ?? []).filter((d) => d.series).map((d) => d.series)}
           values={(data?.bySeries ?? []).filter((d) => d.series).map((d) => d.pairs)}
+          activeValue={activeSeries}
+          onSegmentClick={onChartFilter ? (label: string) => onChartFilter("series", label) : undefined}
         />
       </div>
 
@@ -328,6 +482,8 @@ export default function SkuCharts({ data, loading }: { data?: SkuData; loading?:
           title="Qty Sold by Tier"
           labels={(data?.byTier ?? []).filter((d) => d.tier).map((d) => `T${d.tier}`)}
           values={(data?.byTier ?? []).filter((d) => d.tier).map((d) => d.pairs)}
+          activeValue={activeTierLabel}
+          onSegmentClick={onChartFilter ? (label: string) => onChartFilter("tier", label.replace("T", "")) : undefined}
         />
       </div>
 
