@@ -22,6 +22,7 @@ interface SkuData {
   bySize: { size: string; pairs: number }[];
   byPrice: { label: string; pairs: number }[];
   rankByArticle: { article: string; kode_mix: string; pairs: number; revenue: number }[];
+  kpis?: { revenue: number; pairs: number; asp: number };
 }
 
 const ZUMA_GREEN = "#00E273";
@@ -203,8 +204,10 @@ function BarChart({
 
 function RankTable({
   rows,
+  grandTotals,
 }: {
   rows: { article: string; kode_mix: string; gender?: string; series?: string; color?: string; pairs: number; revenue: number }[];
+  grandTotals?: { pairs: number; revenue: number };
 }) {
   return (
     <ChartCard title="Rank by Article">
@@ -245,12 +248,12 @@ function RankTable({
             )}
           </tbody>
           {rows.length > 0 && (() => {
-            const totQty = rows.reduce((s, r) => s + r.pairs, 0);
-            const totRev = rows.reduce((s, r) => s + r.revenue, 0);
+            const totQty = grandTotals?.pairs ?? rows.reduce((s, r) => s + r.pairs, 0);
+            const totRev = grandTotals?.revenue ?? rows.reduce((s, r) => s + r.revenue, 0);
             const avgAsp = totQty > 0 ? totRev / totQty : 0;
             return (
-              <tfoot>
-                <tr className="border-t-2 border-[#00E273]/40 bg-muted/40">
+              <tfoot className="sticky bottom-0">
+                <tr className="border-t-2 border-[#00E273]/40 bg-card">
                   <td className="px-3 py-2 text-[9px] font-bold text-foreground" colSpan={5}>TOTAL</td>
                   <td className="px-3 py-2 text-right tabular-nums font-bold text-foreground">{fmtNum(totQty)}</td>
                   <td className="px-3 py-2 text-right tabular-nums font-bold text-foreground">{fmtRp(totRev)}</td>
@@ -328,7 +331,7 @@ export default function SkuCharts({ data, loading }: { data?: SkuData; loading?:
         />
       </div>
 
-      <RankTable rows={data?.rankByArticle ?? []} />
+      <RankTable rows={data?.rankByArticle ?? []} grandTotals={data?.kpis ? { pairs: data.kpis.pairs, revenue: data.kpis.revenue } : undefined} />
     </div>
   );
 }
