@@ -153,6 +153,7 @@ export default function HomeInner() {
                 bySize: data?.bySize ?? [],
                 byPrice: data?.byPrice ?? [],
                 rankByArticle: data?.rankByArticle ?? [],
+                kpis: data?.kpis,
               }}
               loading={isLoading}
             />
