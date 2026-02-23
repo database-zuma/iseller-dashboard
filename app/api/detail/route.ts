@@ -49,6 +49,7 @@ export async function GET(req: NextRequest) {
       ["gender",  "COALESCE(NULLIF(d.kodemix_gender, ''), 'Unknown')"],
       ["tier",    "COALESCE(NULLIF(d.kodemix_tier, ''), 'Unknown')"],
       ["tipe",    "d.tipe"],
+      ["version", "d.version"],
     ] as [string, string][]) {
       const fv = parseMulti(sp, param);
       if (!fv.length) continue;
@@ -62,6 +63,10 @@ export async function GET(req: NextRequest) {
       const phs = colorFv.map(() => `$${i++}`).join(", ");
       conds.push(`COALESCE(NULLIF(d.kodemix_color, ''), 'Unknown') IN (${phs})`);
       vals.push(...colorFv);
+    }
+
+    if (sp.get("excludeNonSku") === "1") {
+      conds.push(`(d.produk IS NULL OR (d.produk NOT ILIKE '%shopbag%' AND d.produk NOT ILIKE '%paperbag%' AND d.produk NOT ILIKE '%paper bag%' AND d.produk NOT ILIKE '%shopping bag%' AND d.produk NOT ILIKE '%inbox%' AND d.produk NOT ILIKE '%box%' AND d.produk NOT ILIKE '%gwp%' AND d.produk NOT ILIKE '%gift%' AND d.produk NOT ILIKE '%voucher%' AND d.produk NOT ILIKE '%membership%' AND d.produk NOT ILIKE '%hanger%'))`);
     }
 
     const q = sp.get("q");

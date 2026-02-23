@@ -34,12 +34,17 @@ function buildMvFilters(
     ["tier",   "tier"],
     ["color",  "color"],
     ["tipe",   "tipe"],
+    ["version", "version"],
   ] as [string, string][]) {
     const fv = parseMulti(sp, param);
     if (!fv.length) continue;
     const phs = fv.map(() => `$${i++}`).join(", ");
     conds.push(`${p}${col} IN (${phs})`);
     vals.push(...fv);
+  }
+
+  if (sp.get("excludeNonSku") === "1") {
+    conds.push(`${p}produk IS NULL OR (${p}produk NOT ILIKE '%shopbag%' AND ${p}produk NOT ILIKE '%paperbag%' AND ${p}produk NOT ILIKE '%paper bag%' AND ${p}produk NOT ILIKE '%shopping bag%' AND ${p}produk NOT ILIKE '%inbox%' AND ${p}produk NOT ILIKE '%box%' AND ${p}produk NOT ILIKE '%gwp%' AND ${p}produk NOT ILIKE '%gift%' AND ${p}produk NOT ILIKE '%voucher%' AND ${p}produk NOT ILIKE '%membership%' AND ${p}produk NOT ILIKE '%hanger%')`);
   }
 
   return { conds, nextIdx: i };

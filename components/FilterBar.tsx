@@ -15,9 +15,10 @@ interface FilterOptions {
   colors: string[];
   tiers: string[];
   tipes: string[];
+  versions: string[];
 }
 
-const FILTER_KEYS = ["from", "to", "branch", "store", "gender", "series", "color", "tier", "tipe", "q"] as const;
+const FILTER_KEYS = ["from", "to", "branch", "store", "gender", "series", "color", "tier", "tipe", "version", "q", "excludeNonSku"] as const;
 
 function MultiSelect({
   label,
@@ -253,6 +254,15 @@ export default function FilterBar() {
     router.push("/");
   }, [router]);
 
+  const excludeNonSku = searchParams.get("excludeNonSku") === "1";
+  const toggleExcludeNonSku = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (excludeNonSku) params.delete("excludeNonSku");
+    else params.set("excludeNonSku", "1");
+    params.delete("page");
+    router.push(`/?${params.toString()}`);
+  }, [router, searchParams, excludeNonSku]);
+
   const hasFilters = FILTER_KEYS.some((k) => searchParams.has(k));
 
   return (
@@ -302,6 +312,17 @@ export default function FilterBar() {
         <div className="flex-1 min-w-[80px]">
           <MultiSelect label="TIPE" paramKey="tipe" options={opts?.tipes || []} />
         </div>
+        <div className="flex-1 min-w-[80px]">
+          <MultiSelect label="VERSION" paramKey="version" options={opts?.versions || []} />
+        </div>
+        <button
+          type="button"
+          onClick={toggleExcludeNonSku}
+          className={`flex-shrink-0 px-2.5 py-1.5 text-xs font-semibold rounded-sm border transition-colors cursor-pointer flex items-center gap-1
+            ${excludeNonSku ? "bg-[#00E273] text-black border-[#00E273]" : "bg-card text-card-foreground border-border hover:bg-muted"}`}
+        >
+          {excludeNonSku ? "✓ SKU Only" : "All Products"}
+        </button>
         {hasFilters && (
           <button
             type="button"

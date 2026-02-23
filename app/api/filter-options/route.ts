@@ -32,6 +32,7 @@ function buildWhereClause(
     ["color",  "d.color"],
     ["tier",   "d.tier"],
     ["tipe",   "d.tipe"],
+    ["version", "d.version"],
   ] as [string, string][]) {
     if (param === skipParam) continue;
     const fv = parseMulti(sp, param);
@@ -39,6 +40,11 @@ function buildWhereClause(
     const phs = fv.map(() => `$${i++}`).join(", ");
     conds.push(`${col} IN (${phs})`);
     vals.push(...fv);
+  }
+
+  // excludeNonSku filter
+  if (sp.get("excludeNonSku") === "1") {
+    conds.push(`(d.produk IS NULL OR (d.produk NOT ILIKE '%shopbag%' AND d.produk NOT ILIKE '%paperbag%' AND d.produk NOT ILIKE '%paper bag%' AND d.produk NOT ILIKE '%shopping bag%' AND d.produk NOT ILIKE '%inbox%' AND d.produk NOT ILIKE '%box%' AND d.produk NOT ILIKE '%gwp%' AND d.produk NOT ILIKE '%gift%' AND d.produk NOT ILIKE '%voucher%' AND d.produk NOT ILIKE '%membership%' AND d.produk NOT ILIKE '%hanger%'))`);
   }
 
   return { conds, nextIdx: i };
@@ -56,6 +62,7 @@ export async function GET(req: NextRequest) {
       { key: "colors",   col: "d.color",   param: "color",  nullFilter: "d.color IS NOT NULL AND d.color != ''" },
       { key: "tiers",    col: "d.tier",    param: "tier",   nullFilter: "d.tier IS NOT NULL" },
       { key: "tipes",    col: "d.tipe",    param: "tipe",   nullFilter: "d.tipe IS NOT NULL" },
+      { key: "versions", col: "d.version", param: "version", nullFilter: "d.version IS NOT NULL" },
     ] as const;
 
     const results = await Promise.all(
