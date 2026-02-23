@@ -10,8 +10,6 @@ import {
   Legend,
 } from "chart.js";
 import { Bar } from "react-chartjs-2";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback } from "react";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
@@ -21,8 +19,6 @@ interface TimeSeriesPoint {
   pairs: number;
 }
 
-const PERIODS = ["daily", "weekly", "monthly"] as const;
-
 export default function PeriodChart({
   data,
   loading,
@@ -30,19 +26,6 @@ export default function PeriodChart({
   data?: TimeSeriesPoint[];
   loading?: boolean;
 }) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const period = (searchParams.get("period") || "daily") as typeof PERIODS[number];
-
-  const setPeriod = useCallback(
-    (p: string) => {
-      const params = new URLSearchParams(searchParams.toString());
-      params.set("period", p);
-      router.push(`/?${params.toString()}`);
-    },
-    [router, searchParams]
-  );
-
   const labels = data?.map((d) => d.period) ?? [];
   const revenueData = data?.map((d) => d.revenue / 1_000_000) ?? [];
   const pairsData = data?.map((d) => d.pairs) ?? [];
@@ -97,25 +80,7 @@ export default function PeriodChart({
 
   return (
     <div className="bg-card border border-border rounded-sm p-5 flex flex-col gap-3 shadow-sm">
-      <div className="flex items-center justify-between">
-        <h3 className="text-[10px] font-bold text-foreground uppercase tracking-[0.15em]">Sales Over Time</h3>
-        <div className="flex gap-1">
-          {PERIODS.map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setPeriod(p)}
-              className={`px-3 py-1 text-[10px] font-semibold rounded-sm capitalize transition-colors
-                ${period === p
-                  ? "bg-[#00E273] text-black"
-                  : "bg-transparent text-muted-foreground hover:text-foreground border border-border"
-                }`}
-            >
-              {p}
-            </button>
-          ))}
-        </div>
-      </div>
+      <h3 className="text-[10px] font-bold text-foreground uppercase tracking-[0.15em]">Sales Over Time</h3>
       <div className="h-56 relative">
         {loading ? (
           <div className="absolute inset-0 flex items-center justify-center">

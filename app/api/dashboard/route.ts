@@ -79,9 +79,7 @@ function buildTxnFilters(
 
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
-  const period = sp.get("period") || "daily";
   const cacheKey = `dashboard:${sp.toString()}`;
-
   const cached = getCached<Record<string, unknown>>(cacheKey);
   if (cached) {
     return NextResponse.json(cached, {
@@ -89,10 +87,8 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const periodExpr =
-    period === "monthly" ? "DATE_TRUNC('month', d.sale_date)::DATE" :
-    period === "weekly"  ? "DATE_TRUNC('week',  d.sale_date)::DATE" :
-                           "d.sale_date";
+  // Always use daily granularity for Sales Over Time chart
+  const periodExpr = "d.sale_date";
 
   try {
     const vals: unknown[] = [];
