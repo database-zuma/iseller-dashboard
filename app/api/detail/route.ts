@@ -188,9 +188,10 @@ export async function GET(req: NextRequest) {
       pool.query(dataSql, [...vals, limit, offset]),
     ]);
 
-    const total = Number(countRes.rows[0].total);
-    const totalPairs = Number(countRes.rows[0].total_pairs);
-    const totalRevenue = Number(countRes.rows[0].total_revenue);
+    const countRow = countRes.rows[0] ?? { total: 0, total_pairs: 0, total_revenue: 0 };
+    const total = Number(countRow.total);
+    const totalPairs = Number(countRow.total_pairs);
+    const totalRevenue = Number(countRow.total_revenue);
     const rows = dataRes.rows.map((r: Record<string, unknown>) => ({
       ...r,
       pairs: Number(r.pairs),
@@ -204,7 +205,7 @@ export async function GET(req: NextRequest) {
       pages: Math.ceil(total / limit),
       totals: { pairs: totalPairs, revenue: totalRevenue },
     }, {
-      headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=3600" },
+      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
     });
   } catch (e) {
     console.error("detail error:", e);

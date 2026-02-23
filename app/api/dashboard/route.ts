@@ -83,7 +83,7 @@ export async function GET(req: NextRequest) {
   const cached = getCached<Record<string, unknown>>(cacheKey);
   if (cached) {
     return NextResponse.json(cached, {
-      headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=3600" },
+      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
     });
   }
 
@@ -244,10 +244,12 @@ export async function GET(req: NextRequest) {
       ),
     ]);
 
-    const revenue = Number(kpiRes.rows[0].revenue || 0);
-    const pairs = Number(kpiRes.rows[0].pairs || 0);
-    const transactions = Number(txnRes.rows[0].transactions || 0);
-    const lastUpdate = lastUpdateRes.rows[0].last_date || null;
+    const kpiRow = kpiRes.rows[0] ?? { revenue: 0, pairs: 0 };
+    const txnRow = txnRes.rows[0] ?? { transactions: 0 };
+    const revenue = Number(kpiRow.revenue || 0);
+    const pairs = Number(kpiRow.pairs || 0);
+    const transactions = Number(txnRow.transactions || 0);
+    const lastUpdate = lastUpdateRes.rows[0]?.last_date || null;
     const kpis = {
       revenue,
       pairs,
@@ -320,7 +322,7 @@ export async function GET(req: NextRequest) {
     setCache(cacheKey, body);
 
     return NextResponse.json(body, {
-      headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=3600" },
+      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
     });
   } catch (e) {
     console.error("dashboard error:", e);
