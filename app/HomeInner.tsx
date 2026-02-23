@@ -84,8 +84,10 @@ export default function HomeInner() {
     [router, searchParams]
   );
 
-  const qs = searchParams.toString();
-  const dashboardUrl = `/api/dashboard?v=3&${qs ? `${qs}` : ""}`;
+  const apiParams = new URLSearchParams(searchParams.toString());
+  if (!apiParams.has("from")) apiParams.set("from", "2026-01-01");
+  if (!apiParams.has("to")) apiParams.set("to", new Date().toISOString().substring(0, 10));
+  const dashboardUrl = `/api/dashboard?v=3&${apiParams.toString()}`;
   const { data, isLoading } = useSWR<DashboardData>(dashboardUrl, fetcher, {
     revalidateOnFocus: false,
     keepPreviousData: true,

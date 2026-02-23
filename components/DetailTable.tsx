@@ -60,8 +60,10 @@ export default function DetailTable({ mode }: { mode: Mode }) {
     setSearch(searchParams.get("q") || "");
   }, [searchParams]);
 
-  const qs = searchParams.toString();
-  const apiUrl = `/api/detail?v=2&mode=${mode}&${qs}`;
+  const detailParams = new URLSearchParams(searchParams.toString());
+  if (!detailParams.has("from")) detailParams.set("from", "2026-01-01");
+  if (!detailParams.has("to")) detailParams.set("to", new Date().toISOString().substring(0, 10));
+  const apiUrl = `/api/detail?v=2&mode=${mode}&${detailParams.toString()}`;
 
   const { data, isLoading } = useSWR<DetailResponse>(apiUrl, fetcher, {
     revalidateOnFocus: false,
@@ -111,7 +113,7 @@ export default function DetailTable({ mode }: { mode: Mode }) {
   const handleExport = useCallback(async (format: "csv" | "xlsx") => {
     setExporting(true);
     try {
-      const params = new URLSearchParams(qs);
+      const params = new URLSearchParams(detailParams.toString());
       params.set("export", "all");
       params.set("mode", mode);
       const res = await fetch(`/api/detail?${params}`);
@@ -128,7 +130,7 @@ export default function DetailTable({ mode }: { mode: Mode }) {
     } finally {
       setExporting(false);
     }
-  }, [qs, mode]);
+  }, [detailParams, mode]);
 
   const Th = ({ col, label, right }: { col: string; label: string; right?: boolean }) => (
     <th
