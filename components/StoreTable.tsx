@@ -91,6 +91,27 @@ export default function StoreTable({ stores, loading }: { stores?: StoreRow[]; l
               </tr>
             )}
           </tbody>
+          {!loading && stores && stores.length > 0 && (() => {
+            const totQty = stores.reduce((s, r) => s + r.pairs, 0);
+            const totRev = stores.reduce((s, r) => s + r.revenue, 0);
+            const totTxn = stores.reduce((s, r) => s + r.transactions, 0);
+            const avgAtu = totTxn > 0 ? totQty / totTxn : 0;
+            const avgAsp = totQty > 0 ? totRev / totQty : 0;
+            const avgAtv = totTxn > 0 ? totRev / totTxn : 0;
+            return (
+              <tfoot>
+                <tr className="border-t-2 border-[#00E273]/40 bg-muted/40">
+                  <td className="px-2 py-2.5 text-center text-[9px] font-bold text-foreground" colSpan={3}>TOTAL</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{Math.round(totQty).toLocaleString("en-US")}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{fmtRp(totRev)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{totTxn.toLocaleString("en-US")}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-muted-foreground">{avgAtu.toFixed(1)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-muted-foreground">{fmtRp(avgAsp)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-muted-foreground">{fmtRp(avgAtv)}</td>
+                </tr>
+              </tfoot>
+            );
+          })()}
         </table>
       </div>
       {totalPages > 1 && (

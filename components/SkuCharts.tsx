@@ -238,6 +238,21 @@ function RankTable({
               </tr>
             )}
           </tbody>
+          {rows.length > 0 && (() => {
+            const totQty = rows.reduce((s, r) => s + r.pairs, 0);
+            const totRev = rows.reduce((s, r) => s + r.revenue, 0);
+            const avgAsp = totQty > 0 ? totRev / totQty : 0;
+            return (
+              <tfoot>
+                <tr className="border-t-2 border-[#00E273]/40 bg-muted/40">
+                  <td className="px-3 py-2 text-[9px] font-bold text-foreground" colSpan={2}>TOTAL</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-bold text-foreground">{fmtNum(totQty)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-bold text-foreground">{fmtRp(totRev)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-bold text-muted-foreground">{fmtRp(avgAsp)}</td>
+                </tr>
+              </tfoot>
+            );
+          })()}
         </table>
       </div>
     </ChartCard>
