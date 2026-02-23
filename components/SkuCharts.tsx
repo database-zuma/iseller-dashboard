@@ -204,7 +204,7 @@ function BarChart({
 function RankTable({
   rows,
 }: {
-  rows: { article: string; kode_mix: string; pairs: number; revenue: number }[];
+  rows: { article: string; kode_mix: string; gender?: string; series?: string; color?: string; pairs: number; revenue: number }[];
 }) {
   return (
     <ChartCard title="Rank by Article">
@@ -213,7 +213,10 @@ function RankTable({
           <thead className="sticky top-0 bg-card">
             <tr className="border-b border-border">
               <th className="text-left px-3 py-2 text-[9px] font-bold text-muted-foreground uppercase tracking-wider w-10">#</th>
-              <th className="text-left px-3 py-2 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Article</th>
+              <th className="text-left px-3 py-2 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Kode Mix</th>
+              <th className="text-left px-3 py-2 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Gender</th>
+              <th className="text-left px-3 py-2 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Series</th>
+              <th className="text-left px-3 py-2 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Color</th>
               <th className="text-right px-3 py-2 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Qty Sold</th>
               <th className="text-right px-3 py-2 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Revenue</th>
               <th className="text-right px-3 py-2 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">ASP</th>
@@ -225,7 +228,10 @@ function RankTable({
               return (
                 <tr key={r.kode_mix || `rank-${String(idx)}`} className="border-b border-border/40 hover:bg-muted/20 transition-colors">
                   <td className="px-3 py-2 text-muted-foreground tabular-nums">{idx + 1}</td>
-                  <td className="px-3 py-2 font-medium max-w-[250px] truncate">{r.article || r.kode_mix || "—"}</td>
+                  <td className="px-3 py-2 font-medium max-w-[180px] truncate">{r.kode_mix || r.article || "—"}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{r.gender || "—"}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{r.series || "—"}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{r.color || "—"}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{fmtNum(r.pairs)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{fmtRp(r.revenue)}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{fmtRp(asp)}</td>
@@ -234,7 +240,7 @@ function RankTable({
             })}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">No data</td>
+                <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">No data</td>
               </tr>
             )}
           </tbody>
@@ -245,7 +251,7 @@ function RankTable({
             return (
               <tfoot>
                 <tr className="border-t-2 border-[#00E273]/40 bg-muted/40">
-                  <td className="px-3 py-2 text-[9px] font-bold text-foreground" colSpan={2}>TOTAL</td>
+                  <td className="px-3 py-2 text-[9px] font-bold text-foreground" colSpan={5}>TOTAL</td>
                   <td className="px-3 py-2 text-right tabular-nums font-bold text-foreground">{fmtNum(totQty)}</td>
                   <td className="px-3 py-2 text-right tabular-nums font-bold text-foreground">{fmtRp(totRev)}</td>
                   <td className="px-3 py-2 text-right tabular-nums font-bold text-muted-foreground">{fmtRp(avgAsp)}</td>

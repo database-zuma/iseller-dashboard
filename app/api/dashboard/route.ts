@@ -231,10 +231,13 @@ export async function GET(req: NextRequest) {
         `SELECT
            COALESCE(d.article, d.kode_besar) AS article,
            d.kode_mix,
+           d.gender,
+           d.series,
+           d.color,
            SUM(d.pairs) AS pairs,
            SUM(d.revenue) AS revenue
          FROM mart.mv_iseller_summary d ${where}
-         GROUP BY d.article, d.kode_besar, d.kode_mix
+         GROUP BY d.article, d.kode_besar, d.kode_mix, d.gender, d.series, d.color
          ORDER BY revenue DESC NULLS LAST
          LIMIT 100`,
         vals
