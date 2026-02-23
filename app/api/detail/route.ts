@@ -161,8 +161,11 @@ export async function GET(req: NextRequest) {
     }
 
     const countSql = `
-      SELECT COUNT(*) AS total FROM (
-        SELECT ${groupBy}
+      SELECT COUNT(*) AS total,
+             COALESCE(SUM(sub.pairs), 0) AS total_pairs,
+             COALESCE(SUM(sub.revenue), 0) AS total_revenue
+      FROM (
+        SELECT SUM(d.pairs) AS pairs, SUM(d.revenue) AS revenue
         FROM mart.mv_iseller_summary d
         ${where}
         GROUP BY ${groupBy}
@@ -186,18 +189,20 @@ export async function GET(req: NextRequest) {
     ]);
 
     const total = Number(countRes.rows[0].total);
+    const totalPairs = Number(countRes.rows[0].total_pairs);
+    const totalRevenue = Number(countRes.rows[0].total_revenue);
     const rows = dataRes.rows.map((r: Record<string, unknown>) => ({
       ...r,
       pairs: Number(r.pairs),
       revenue: Number(r.revenue),
       avg_price: Number(r.avg_price),
     }));
-
     return NextResponse.json({
       rows,
       total,
       page,
       pages: Math.ceil(total / limit),
+      totals: { pairs: totalPairs, revenue: totalRevenue },
     }, {
       headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=3600" },
     });

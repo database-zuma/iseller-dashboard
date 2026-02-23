@@ -30,6 +30,7 @@ interface DetailResponse {
   total: number;
   page: number;
   pages: number;
+  totals?: { pairs: number; revenue: number };
 }
 
 const KODE_HEADERS = ["Store", "Kode", "Article", "Gender", "Series", "Color", "Tipe", "Tier", "Qty", "Revenue", "ASP"];
@@ -247,16 +248,14 @@ export default function DetailTable({ mode }: { mode: Mode }) {
                 </tr>
               )}
             </tbody>
-            {!isLoading && data?.rows && data.rows.length > 0 && (() => {
-              const totQty = data.rows.reduce((s: number, r: DetailRow) => s + r.pairs, 0);
-              const totRev = data.rows.reduce((s: number, r: DetailRow) => s + r.revenue, 0);
-              const avgAsp = totQty > 0 ? totRev / totQty : 0;
+            {!isLoading && data?.totals && data.totals.pairs > 0 && (() => {
+              const avgAsp = data.totals.pairs > 0 ? data.totals.revenue / data.totals.pairs : 0;
               return (
                 <tfoot>
                   <tr className="border-t-2 border-[#00E273]/40 bg-muted/40">
-                    <td className="px-3 py-2.5 text-[9px] font-bold text-foreground" colSpan={8}>PAGE TOTAL</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{totQty.toLocaleString("en-US")}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{fmtRp(totRev)}</td>
+                    <td className="px-3 py-2.5 text-[9px] font-bold text-foreground" colSpan={8}>TOTAL</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{data.totals.pairs.toLocaleString("en-US")}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{fmtRp(data.totals.revenue)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-muted-foreground">{fmtRp(avgAsp)}</td>
                   </tr>
                 </tfoot>
