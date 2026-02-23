@@ -321,7 +321,7 @@ export default function FilterBar() {
           className={`flex-shrink-0 px-2.5 py-1.5 text-xs font-semibold rounded-sm border transition-colors cursor-pointer flex items-center gap-1
             ${excludeNonSku ? "bg-[#00E273] text-black border-[#00E273]" : "bg-card text-card-foreground border-border hover:bg-muted"}`}
         >
-          {excludeNonSku ? "✓ SKU Only" : "All Products"}
+          {excludeNonSku ? "SKU Only: ON" : "SKU Only: OFF"}
         </button>
         {hasFilters && (
           <button
