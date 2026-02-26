@@ -594,7 +594,7 @@ export default function PromoTab() {
         {ROW1_CARDS.map(({ label, value, type }) => (
           <div
             key={label}
-            className="bg-card border border-border rounded-sm px-4 py-3 flex flex-col gap-1 border-l-2 border-l-[#00E273] shadow-sm"
+            className="bg-[#00E273]/[0.04] border border-[#00E273]/20 rounded-sm px-4 py-3 flex flex-col gap-1 border-l-2 border-l-[#00E273] shadow-sm"
           >
             <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-[0.15em]">{label}</p>
             {isLoading ? (
@@ -614,7 +614,7 @@ export default function PromoTab() {
           <div
             key={label}
             title={tooltip}
-            className="bg-card border border-border rounded-sm px-4 py-3 flex flex-col gap-1 border-l-2 border-l-[#00E273] shadow-sm"
+            className={`${mode === "all" ? "bg-blue-50/50" : "bg-card"} border border-border rounded-sm px-4 py-3 flex flex-col gap-1 border-l-2 border-l-[#00E273] shadow-sm transition-colors`}
           >
             <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-[0.15em]">
               {label}
@@ -634,7 +634,7 @@ export default function PromoTab() {
       </div>
 
       {/* ── 3. Time Series Chart ───────────────────── */}
-      <div className="bg-card border border-border rounded-sm p-5 flex flex-col gap-3 shadow-sm">
+      <div className={`${mode === "all" ? "bg-blue-50/50" : "bg-card"} border border-border rounded-sm p-5 flex flex-col gap-3 shadow-sm transition-colors`}>
         <h3 className="text-[10px] font-bold text-foreground uppercase tracking-[0.15em]">
           {mode === "promo" ? "Promo Sales Over Time" : "Overall Sales Over Time"}
         </h3>
@@ -650,7 +650,7 @@ export default function PromoTab() {
       </div>
 
       {/* ── 4. Campaign Breakdown ──────────────────── */}
-      <div className="bg-card border border-border rounded-sm overflow-hidden shadow-sm">
+      <div className="bg-[#00E273]/[0.04] border border-[#00E273]/20 rounded-sm overflow-hidden shadow-sm">
         <div className="px-5 py-3.5 border-b border-border">
           <h3 className="text-[10px] font-bold text-foreground uppercase tracking-[0.15em]">Campaign Breakdown</h3>
         </div>
@@ -723,7 +723,7 @@ export default function PromoTab() {
       </div>
 
       {/* ── 5. Store Table (mode-dependent) ─────────────────────────── */}
-      <div className="bg-card border border-border rounded-sm overflow-hidden flex flex-col shadow-sm">
+      <div className={`${mode === "all" ? "bg-blue-50/50" : "bg-card"} border border-border rounded-sm overflow-hidden flex flex-col shadow-sm transition-colors`}>
         <div className="px-5 py-3.5 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <h3 className="text-[10px] font-bold text-foreground uppercase tracking-[0.15em]">
@@ -889,7 +889,7 @@ export default function PromoTab() {
       </div>
 
       {/* ── 6. SPG Leaderboard ─────────────────────── */}
-      <div className="bg-card border border-border rounded-sm overflow-hidden shadow-sm">
+      <div className="bg-[#00E273]/[0.04] border border-[#00E273]/20 rounded-sm overflow-hidden shadow-sm">
         <div className="px-5 py-3.5 border-b border-border">
           <h3 className="text-[10px] font-bold text-foreground uppercase tracking-[0.15em]">SPG Leaderboard</h3>
         </div>
