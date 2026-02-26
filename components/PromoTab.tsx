@@ -51,6 +51,13 @@ interface TimeSeriesRow {
   txnCount: number;
 }
 
+interface OverallTimeSeriesRow {
+  period: string;
+  pairs: number;
+  revenue: number;
+  txnCount: number;
+}
+
 interface CampaignRow {
   campaign: string;
   qtyAll: number;
@@ -67,6 +74,14 @@ interface StoreRow {
   qtyPromo: number;
   revenue: number;
   discountTotal: number;
+  txnCount: number;
+}
+
+interface OverallStoreRow {
+  toko: string;
+  branch: string;
+  pairs: number;
+  revenue: number;
   txnCount: number;
 }
 
@@ -87,8 +102,10 @@ interface PromoData {
   promoKpis: PromoKpis;
   overallKpis: OverallKpis;
   timeSeries: TimeSeriesRow[];
+  overallTimeSeries: OverallTimeSeriesRow[];
   byCampaign: CampaignRow[];
   stores: StoreRow[];
+  overallStores: OverallStoreRow[];
   spgLeaderboard: SpgRow[];
   campaignOptions: CampaignOption[];
 }
@@ -110,7 +127,7 @@ function fmt(n: number, type: "currency" | "int" | "decimal" | "pct"): string {
 
 const ROWS_PER_PAGE = 10;
 
-type SortKey = "toko" | "branch" | "qtyAll" | "qtyPromo" | "revenue" | "discountTotal" | "txnCount";
+type SortKey = "toko" | "branch" | "qtyAll" | "qtyPromo" | "revenue" | "discountTotal" | "txnCount" | "pairs";
 
 /* ─── component ─────────────────────────────────────── */
 
@@ -225,13 +242,40 @@ export default function PromoTab() {
     if (storePage !== 1) setStorePage(1);
   }
 
-  /* ── sorted stores ── */
+  /* ── reset sortKey when switching mode if current key is promo-only ── */
+  const prevModeRef = useRef(mode);
+  if (prevModeRef.current !== mode) {
+    prevModeRef.current = mode;
+    const promoOnlyKeys: SortKey[] = ["qtyAll", "qtyPromo", "discountTotal"];
+    if (mode === "all" && promoOnlyKeys.includes(sortKey)) {
+      setSortKey("revenue");
+      setSortDir("desc");
+    }
+    if (storePage !== 1) setStorePage(1);
+  }
+
+  /* ── sorted stores (mode-dependent) ── */
   const sortedStores = useMemo(() => {
+    if (mode === "all") {
+      if (!data?.overallStores) return [];
+      const sorted = [...data.overallStores];
+      sorted.sort((a, b) => {
+        if (sortKey === "toko" || sortKey === "branch") {
+          const aVal = a[sortKey] ?? "";
+          const bVal = b[sortKey] ?? "";
+          return sortDir === "asc" ? String(aVal).localeCompare(String(bVal)) : String(bVal).localeCompare(String(aVal));
+        }
+        const keyMap: Record<string, keyof OverallStoreRow> = { pairs: "pairs", revenue: "revenue", txnCount: "txnCount" };
+        const k = keyMap[sortKey] ?? "revenue";
+        return sortDir === "asc" ? Number(a[k]) - Number(b[k]) : Number(b[k]) - Number(a[k]);
+      });
+      return sorted;
+    }
     if (!data?.stores) return [];
     const sorted = [...data.stores];
     sorted.sort((a, b) => {
-      const aVal = a[sortKey];
-      const bVal = b[sortKey];
+      const aVal = a[sortKey as keyof StoreRow];
+      const bVal = b[sortKey as keyof StoreRow];
       if (typeof aVal === "string" && typeof bVal === "string") {
         return sortDir === "asc" ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
       }
@@ -240,7 +284,7 @@ export default function PromoTab() {
       return sortDir === "asc" ? aNum - bNum : bNum - aNum;
     });
     return sorted;
-  }, [data?.stores, sortKey, sortDir]);
+  }, [mode, data?.stores, data?.overallStores, sortKey, sortDir]);
 
   const totalStorePages = Math.ceil(sortedStores.length / ROWS_PER_PAGE);
   const currentStoreRows = sortedStores.slice((storePage - 1) * ROWS_PER_PAGE, storePage * ROWS_PER_PAGE);
@@ -294,40 +338,44 @@ export default function PromoTab() {
     [router, searchParams]
   );
 
-  /* ── store export ── */
+  /* ── store export (mode-dependent) ── */
   const handleStoreCSV = useCallback(() => {
     if (sortedStores.length === 0) return;
-    const headers = ["#", "Store", "Branch", "QTY All", "QTY Promo", "Revenue", "Discount", "TXN"];
-    const keys = ["rank", "toko", "branch", "qtyAll", "qtyPromo", "revenue", "discountTotal", "txnCount"];
-    const rows: Record<string, unknown>[] = sortedStores.map((s, idx) => ({
-      rank: idx + 1,
-      toko: s.toko,
-      branch: s.branch,
-      qtyAll: s.qtyAll,
-      qtyPromo: s.qtyPromo,
-      revenue: s.revenue,
-      discountTotal: s.discountTotal,
-      txnCount: s.txnCount,
-    }));
-    downloadCSV(toCSV(headers, rows, keys), "promo_store_performance.csv");
-  }, [sortedStores]);
+    if (mode === "all") {
+      const headers = ["#", "Store", "Branch", "Pairs", "Revenue", "TXN"];
+      const keys = ["rank", "toko", "branch", "pairs", "revenue", "txnCount"];
+      const rows: Record<string, unknown>[] = (sortedStores as OverallStoreRow[]).map((s, idx) => ({
+        rank: idx + 1, toko: s.toko, branch: s.branch, pairs: s.pairs, revenue: s.revenue, txnCount: s.txnCount,
+      }));
+      downloadCSV(toCSV(headers, rows, keys), "overall_store_performance.csv");
+    } else {
+      const headers = ["#", "Store", "Branch", "QTY All", "QTY Promo", "Revenue", "Discount", "TXN"];
+      const keys = ["rank", "toko", "branch", "qtyAll", "qtyPromo", "revenue", "discountTotal", "txnCount"];
+      const rows: Record<string, unknown>[] = (sortedStores as StoreRow[]).map((s, idx) => ({
+        rank: idx + 1, toko: s.toko, branch: s.branch, qtyAll: s.qtyAll, qtyPromo: s.qtyPromo, revenue: s.revenue, discountTotal: s.discountTotal, txnCount: s.txnCount,
+      }));
+      downloadCSV(toCSV(headers, rows, keys), "promo_store_performance.csv");
+    }
+  }, [sortedStores, mode]);
 
   const handleStoreXLSX = useCallback(() => {
     if (sortedStores.length === 0) return;
-    const headers = ["#", "Store", "Branch", "QTY All", "QTY Promo", "Revenue", "Discount", "TXN"];
-    const keys = ["rank", "toko", "branch", "qtyAll", "qtyPromo", "revenue", "discountTotal", "txnCount"];
-    const rows: Record<string, unknown>[] = sortedStores.map((s, idx) => ({
-      rank: idx + 1,
-      toko: s.toko,
-      branch: s.branch,
-      qtyAll: s.qtyAll,
-      qtyPromo: s.qtyPromo,
-      revenue: s.revenue,
-      discountTotal: s.discountTotal,
-      txnCount: s.txnCount,
-    }));
-    void downloadXLSX(headers, rows, keys, "promo_store_performance.xlsx");
-  }, [sortedStores]);
+    if (mode === "all") {
+      const headers = ["#", "Store", "Branch", "Pairs", "Revenue", "TXN"];
+      const keys = ["rank", "toko", "branch", "pairs", "revenue", "txnCount"];
+      const rows: Record<string, unknown>[] = (sortedStores as OverallStoreRow[]).map((s, idx) => ({
+        rank: idx + 1, toko: s.toko, branch: s.branch, pairs: s.pairs, revenue: s.revenue, txnCount: s.txnCount,
+      }));
+      void downloadXLSX(headers, rows, keys, "overall_store_performance.xlsx");
+    } else {
+      const headers = ["#", "Store", "Branch", "QTY All", "QTY Promo", "Revenue", "Discount", "TXN"];
+      const keys = ["rank", "toko", "branch", "qtyAll", "qtyPromo", "revenue", "discountTotal", "txnCount"];
+      const rows: Record<string, unknown>[] = (sortedStores as StoreRow[]).map((s, idx) => ({
+        rank: idx + 1, toko: s.toko, branch: s.branch, qtyAll: s.qtyAll, qtyPromo: s.qtyPromo, revenue: s.revenue, discountTotal: s.discountTotal, txnCount: s.txnCount,
+      }));
+      void downloadXLSX(headers, rows, keys, "promo_store_performance.xlsx");
+    }
+  }, [sortedStores, mode]);
 
   /* ── sort indicator ── */
   const sortIndicator = (key: SortKey) => {
@@ -341,10 +389,16 @@ export default function PromoTab() {
   const thStatic = "text-left px-3 py-2.5 text-[9px] font-bold text-muted-foreground uppercase tracking-[0.12em]";
   const thStaticRight = "text-right px-3 py-2.5 text-[9px] font-bold text-muted-foreground uppercase tracking-[0.12em]";
 
-  /* ── chart data ── */
-  const chartLabels = data?.timeSeries?.map((d) => d.period) ?? [];
-  const chartRevenue = data?.timeSeries?.map((d) => d.revenue / 1_000_000) ?? [];
-  const chartQtyPromo = data?.timeSeries?.map((d) => d.qtyPromo) ?? [];
+  /* ── chart data (mode-dependent) ── */
+  const chartLabels = mode === "promo"
+    ? (data?.timeSeries?.map((d) => d.period) ?? [])
+    : (data?.overallTimeSeries?.map((d) => d.period) ?? []);
+  const chartRevenue = mode === "promo"
+    ? (data?.timeSeries?.map((d) => d.revenue / 1_000_000) ?? [])
+    : (data?.overallTimeSeries?.map((d) => d.revenue / 1_000_000) ?? []);
+  const chartSecondary = mode === "promo"
+    ? (data?.timeSeries?.map((d) => d.qtyPromo) ?? [])
+    : (data?.overallTimeSeries?.map((d) => d.pairs) ?? []);
 
   const chartData = {
     labels: chartLabels,
@@ -357,8 +411,8 @@ export default function PromoTab() {
         yAxisID: "y",
       },
       {
-        label: "QTY Promo",
-        data: chartQtyPromo,
+        label: mode === "promo" ? "QTY Promo" : "Pairs (All)",
+        data: chartSecondary,
         backgroundColor: "#1a1a1a",
         borderRadius: 1,
         yAxisID: "y1",
@@ -382,7 +436,8 @@ export default function PromoTab() {
             if (ctx.dataset.label?.includes("Revenue")) {
               return `Revenue: Rp ${(y * 1_000_000).toLocaleString("en-US")}`;
             }
-            return `QTY Promo: ${y.toLocaleString("en-US")}`;
+            const secLabel = mode === "promo" ? "QTY Promo" : "Pairs";
+            return `${secLabel}: ${y.toLocaleString("en-US")}`;
           },
         },
       },
@@ -580,7 +635,9 @@ export default function PromoTab() {
 
       {/* ── 3. Time Series Chart ───────────────────── */}
       <div className="bg-card border border-border rounded-sm p-5 flex flex-col gap-3 shadow-sm">
-        <h3 className="text-[10px] font-bold text-foreground uppercase tracking-[0.15em]">Promo Sales Over Time</h3>
+        <h3 className="text-[10px] font-bold text-foreground uppercase tracking-[0.15em]">
+          {mode === "promo" ? "Promo Sales Over Time" : "Overall Sales Over Time"}
+        </h3>
         <div className="h-56 relative">
           {isLoading ? (
             <div className="absolute inset-0 flex items-center justify-center">
@@ -665,11 +722,13 @@ export default function PromoTab() {
         </div>
       </div>
 
-      {/* ── 5. Store Table ─────────────────────────── */}
+      {/* ── 5. Store Table (mode-dependent) ─────────────────────────── */}
       <div className="bg-card border border-border rounded-sm overflow-hidden flex flex-col shadow-sm">
         <div className="px-5 py-3.5 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <h3 className="text-[10px] font-bold text-foreground uppercase tracking-[0.15em]">Store Performance (Promo)</h3>
+            <h3 className="text-[10px] font-bold text-foreground uppercase tracking-[0.15em]">
+              {mode === "promo" ? "Store Performance (Promo)" : "Store Performance (All)"}
+            </h3>
             {!isLoading && sortedStores.length > 0 && (
               <div className="flex gap-1">
                 <button
@@ -700,37 +759,31 @@ export default function PromoTab() {
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="text-center px-2 py-2.5 text-[9px] font-bold text-muted-foreground uppercase tracking-[0.12em] w-8">
-                  #
-                </th>
-                <th className={thSort} onClick={() => handleSort("toko")}>
-                  Store{sortIndicator("toko")}
-                </th>
-                <th className={thSort} onClick={() => handleSort("branch")}>
-                  Branch{sortIndicator("branch")}
-                </th>
-                <th className={thSortRight} onClick={() => handleSort("qtyAll")}>
-                  QTY All{sortIndicator("qtyAll")}
-                </th>
-                <th className={thSortRight} onClick={() => handleSort("qtyPromo")}>
-                  QTY Promo{sortIndicator("qtyPromo")}
-                </th>
-                <th className={thSortRight} onClick={() => handleSort("revenue")}>
-                  Revenue{sortIndicator("revenue")}
-                </th>
-                <th className={thSortRight} onClick={() => handleSort("discountTotal")}>
-                  Discount{sortIndicator("discountTotal")}
-                </th>
-                <th className={thSortRight} onClick={() => handleSort("txnCount")}>
-                  TXN{sortIndicator("txnCount")}
-                </th>
+                <th className="text-center px-2 py-2.5 text-[9px] font-bold text-muted-foreground uppercase tracking-[0.12em] w-8">#</th>
+                <th className={thSort} onClick={() => handleSort("toko")}>Store{sortIndicator("toko")}</th>
+                <th className={thSort} onClick={() => handleSort("branch")}>Branch{sortIndicator("branch")}</th>
+                {mode === "promo" ? (
+                  <>
+                    <th className={thSortRight} onClick={() => handleSort("qtyAll")}>QTY All{sortIndicator("qtyAll")}</th>
+                    <th className={thSortRight} onClick={() => handleSort("qtyPromo")}>QTY Promo{sortIndicator("qtyPromo")}</th>
+                    <th className={thSortRight} onClick={() => handleSort("revenue")}>Revenue{sortIndicator("revenue")}</th>
+                    <th className={thSortRight} onClick={() => handleSort("discountTotal")}>Discount{sortIndicator("discountTotal")}</th>
+                    <th className={thSortRight} onClick={() => handleSort("txnCount")}>TXN{sortIndicator("txnCount")}</th>
+                  </>
+                ) : (
+                  <>
+                    <th className={thSortRight} onClick={() => handleSort("pairs")}>Pairs{sortIndicator("pairs")}</th>
+                    <th className={thSortRight} onClick={() => handleSort("revenue")}>Revenue{sortIndicator("revenue")}</th>
+                    <th className={thSortRight} onClick={() => handleSort("txnCount")}>TXN{sortIndicator("txnCount")}</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 Array.from({ length: 8 }, (_, i) => (
                   <tr key={`sskel-${String(i)}`} className="border-b border-border/50">
-                    {Array.from({ length: 8 }, (_, j) => (
+                    {Array.from({ length: mode === "promo" ? 8 : 6 }, (_, j) => (
                       <td key={`sc-${String(j)}`} className="px-3 py-2.5">
                         <div className="h-3 bg-muted animate-pulse rounded-sm w-full" />
                       </td>
@@ -740,61 +793,72 @@ export default function PromoTab() {
               ) : currentStoreRows.length > 0 ? (
                 currentStoreRows.map((s, idx) => {
                   const rank = (storePage - 1) * ROWS_PER_PAGE + idx + 1;
+                  const row = s as StoreRow & OverallStoreRow;
                   return (
-                    <tr key={s.toko} className="border-b border-border/40 hover:bg-muted/20 transition-colors">
+                    <tr key={row.toko} className="border-b border-border/40 hover:bg-muted/20 transition-colors">
                       <td className="px-2 py-2.5 text-center tabular-nums text-xs text-muted-foreground font-medium">{rank}</td>
-                      <td className="px-3 py-2.5 font-medium text-foreground max-w-[180px] truncate text-xs">{s.toko}</td>
-                      <td className="px-3 py-2.5 text-muted-foreground text-xs">{s.branch || "—"}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-xs">{Math.round(s.qtyAll).toLocaleString("en-US")}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-xs">{Math.round(s.qtyPromo).toLocaleString("en-US")}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-xs">{fmt(s.revenue, "currency")}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-xs text-muted-foreground">
-                        {fmt(s.discountTotal, "currency")}
-                      </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums text-xs text-muted-foreground">
-                        {s.txnCount.toLocaleString("en-US")}
-                      </td>
+                      <td className="px-3 py-2.5 font-medium text-foreground max-w-[180px] truncate text-xs">{row.toko}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground text-xs">{row.branch || "—"}</td>
+                      {mode === "promo" ? (
+                        <>
+                          <td className="px-3 py-2.5 text-right tabular-nums text-xs">{Math.round(row.qtyAll).toLocaleString("en-US")}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums text-xs">{Math.round(row.qtyPromo).toLocaleString("en-US")}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums text-xs">{fmt(row.revenue, "currency")}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums text-xs text-muted-foreground">{fmt(row.discountTotal, "currency")}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums text-xs text-muted-foreground">{row.txnCount.toLocaleString("en-US")}</td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="px-3 py-2.5 text-right tabular-nums text-xs">{Math.round(row.pairs).toLocaleString("en-US")}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums text-xs">{fmt(row.revenue, "currency")}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums text-xs text-muted-foreground">{row.txnCount.toLocaleString("en-US")}</td>
+                        </>
+                      )}
                     </tr>
                   );
                 })
               ) : (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground text-xs">
-                    No data
-                  </td>
+                  <td colSpan={mode === "promo" ? 8 : 6} className="px-4 py-8 text-center text-muted-foreground text-xs">No data</td>
                 </tr>
               )}
             </tbody>
             {!isLoading && sortedStores.length > 0 && (() => {
-              const totAll = sortedStores.reduce((sum, r) => sum + r.qtyAll, 0);
-              const totPromo = sortedStores.reduce((sum, r) => sum + r.qtyPromo, 0);
-              const totRev = sortedStores.reduce((sum, r) => sum + r.revenue, 0);
-              const totDisc = sortedStores.reduce((sum, r) => sum + r.discountTotal, 0);
-              const totTxn = sortedStores.reduce((sum, r) => sum + r.txnCount, 0);
-              return (
-                <tfoot>
-                  <tr className="border-t-2 border-[#00E273]/40 bg-muted/40">
-                    <td className="px-2 py-2.5 text-center text-[9px] font-bold text-foreground" colSpan={3}>
-                      TOTAL
-                    </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">
-                      {Math.round(totAll).toLocaleString("en-US")}
-                    </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">
-                      {Math.round(totPromo).toLocaleString("en-US")}
-                    </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">
-                      {fmt(totRev, "currency")}
-                    </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-muted-foreground">
-                      {fmt(totDisc, "currency")}
-                    </td>
-                    <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">
-                      {totTxn.toLocaleString("en-US")}
-                    </td>
-                  </tr>
-                </tfoot>
-              );
+              if (mode === "promo") {
+                const rows = sortedStores as StoreRow[];
+                const totAll = rows.reduce((sum, r) => sum + r.qtyAll, 0);
+                const totPromo = rows.reduce((sum, r) => sum + r.qtyPromo, 0);
+                const totRev = rows.reduce((sum, r) => sum + r.revenue, 0);
+                const totDisc = rows.reduce((sum, r) => sum + r.discountTotal, 0);
+                const totTxn = rows.reduce((sum, r) => sum + r.txnCount, 0);
+                return (
+                  <tfoot>
+                    <tr className="border-t-2 border-[#00E273]/40 bg-muted/40">
+                      <td className="px-2 py-2.5 text-center text-[9px] font-bold text-foreground" colSpan={3}>TOTAL</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{Math.round(totAll).toLocaleString("en-US")}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{Math.round(totPromo).toLocaleString("en-US")}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{fmt(totRev, "currency")}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-muted-foreground">{fmt(totDisc, "currency")}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{totTxn.toLocaleString("en-US")}</td>
+                    </tr>
+                  </tfoot>
+                );
+              } else {
+                const rows = sortedStores as OverallStoreRow[];
+                const totPairs = rows.reduce((sum, r) => sum + r.pairs, 0);
+                const totRev = rows.reduce((sum, r) => sum + r.revenue, 0);
+                const totTxn = rows.reduce((sum, r) => sum + r.txnCount, 0);
+                return (
+                  <tfoot>
+                    <tr className="border-t-2 border-[#00E273]/40 bg-muted/40">
+                      <td className="px-2 py-2.5 text-center text-[9px] font-bold text-foreground" colSpan={3}>TOTAL</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{Math.round(totPairs).toLocaleString("en-US")}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{fmt(totRev, "currency")}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{totTxn.toLocaleString("en-US")}</td>
+                    </tr>
+                  </tfoot>
+                );
+              }
             })()}
           </table>
         </div>

@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
 
     const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
 
-    /* ───── Mode B: overall store metrics during same period ───── */
+    /* ───── Mode B: overall filters (no campaign filter — we want ALL struks) ───── */
     const mvVals: unknown[] = [];
     const mvConds: string[] = [];
     let mi = 1;
@@ -90,7 +90,8 @@ export async function GET(req: NextRequest) {
       ? `WHERE ${conds.join(" AND ")} AND p.spg != 'Unknown'`
       : "WHERE p.spg != 'Unknown'";
 
-    /* ───── sequential queries on single connection ───── */
+    /* ═══════ Mode A queries (promo MV) ═══════ */
+
     const kpiRes = await client.query(
       `SELECT SUM(p.qty_all) AS qty_all,
               SUM(p.qty_promo) AS qty_promo,
@@ -137,18 +138,6 @@ export async function GET(req: NextRequest) {
       vals
     );
 
-    const overallPairsRes = await client.query(
-      `SELECT SUM(d.pairs) AS pairs, SUM(d.revenue) AS revenue
-       FROM mart.mv_iseller_summary d ${mvWhere}`,
-      mvVals
-    );
-
-    const overallTxnRes = await client.query(
-      `SELECT SUM(t.txn_count) AS txn_count
-       FROM mart.mv_iseller_txn_agg t ${txnWhere}`,
-      txnVals
-    );
-
     const spgRes = await client.query(
       `SELECT p.spg,
               SUM(p.qty_promo) AS qty_promo,
@@ -168,7 +157,54 @@ export async function GET(req: NextRequest) {
        ORDER BY pc.campaign_name`
     );
 
-    /* ───── Mode A KPIs ───── */
+    /* ═══════ Mode B queries (overall from summary + txn_agg) ═══════ */
+
+    const overallPairsRes = await client.query(
+      `SELECT SUM(d.pairs) AS pairs, SUM(d.revenue) AS revenue
+       FROM mart.mv_iseller_summary d ${mvWhere}`,
+      mvVals
+    );
+
+    const overallTxnRes = await client.query(
+      `SELECT SUM(t.txn_count) AS txn_count
+       FROM mart.mv_iseller_txn_agg t ${txnWhere}`,
+      txnVals
+    );
+
+    /* Mode B time series: daily pairs + revenue */
+    const overallTsByDayRes = await client.query(
+      `SELECT d.sale_date AS period, SUM(d.pairs) AS pairs, SUM(d.revenue) AS revenue
+       FROM mart.mv_iseller_summary d ${mvWhere}
+       GROUP BY d.sale_date ORDER BY d.sale_date`,
+      mvVals
+    );
+
+    /* Mode B time series: daily txn count */
+    const overallTsTxnRes = await client.query(
+      `SELECT t.sale_date AS period, SUM(t.txn_count) AS txn_count
+       FROM mart.mv_iseller_txn_agg t ${txnWhere}
+       GROUP BY t.sale_date ORDER BY t.sale_date`,
+      txnVals
+    );
+
+    /* Mode B stores: store pairs + revenue */
+    const overallStoreRes = await client.query(
+      `SELECT d.toko, d.branch, SUM(d.pairs) AS pairs, SUM(d.revenue) AS revenue
+       FROM mart.mv_iseller_summary d ${mvWhere}
+       GROUP BY d.toko, d.branch ORDER BY revenue DESC`,
+      mvVals
+    );
+
+    /* Mode B stores: store txn count */
+    const overallStoreTxnRes = await client.query(
+      `SELECT t.toko, t.branch, SUM(t.txn_count) AS txn_count
+       FROM mart.mv_iseller_txn_agg t ${txnWhere}
+       GROUP BY t.toko, t.branch`,
+      txnVals
+    );
+
+    /* ═══════ Build KPIs ═══════ */
+
     const k = kpiRes.rows[0] ?? {};
     const qtyAll = Number(k.qty_all || 0);
     const qtyPromo = Number(k.qty_promo || 0);
@@ -188,7 +224,6 @@ export async function GET(req: NextRequest) {
       atv: txnCount > 0 ? revenue / txnCount : 0,
     };
 
-    /* ───── Mode B KPIs (overall during period) ───── */
     const ovP = overallPairsRes.rows[0] ?? {};
     const ovT = overallTxnRes.rows[0] ?? {};
     const overallPairs = Number(ovP.pairs || 0);
@@ -204,7 +239,39 @@ export async function GET(req: NextRequest) {
       atv: overallTxn > 0 ? overallRevenue / overallTxn : 0,
     };
 
-    /* ───── response ───── */
+    /* ═══════ Merge Mode B time series (join summary + txn by date) ═══════ */
+
+    const txnByDate = new Map<string, number>();
+    for (const r of overallTsTxnRes.rows) {
+      txnByDate.set(String(r.period).substring(0, 10), Number(r.txn_count));
+    }
+
+    const overallTimeSeries = overallTsByDayRes.rows.map((r: Record<string, unknown>) => {
+      const period = String(r.period).substring(0, 10);
+      return {
+        period,
+        pairs: Number(r.pairs),
+        revenue: Number(r.revenue),
+        txnCount: txnByDate.get(period) ?? 0,
+      };
+    });
+
+    /* ═══════ Merge Mode B stores (join summary + txn by store) ═══════ */
+
+    const txnByStore = new Map<string, number>();
+    for (const r of overallStoreTxnRes.rows) {
+      txnByStore.set(String(r.toko), Number(r.txn_count));
+    }
+
+    const overallStores = overallStoreRes.rows.map((r: Record<string, unknown>) => ({
+      toko: r.toko,
+      branch: r.branch,
+      pairs: Number(r.pairs),
+      revenue: Number(r.revenue),
+      txnCount: txnByStore.get(String(r.toko)) ?? 0,
+    }));
+
+    /* ═══════ Response ═══════ */
     const body = {
       promoKpis,
       overallKpis,
@@ -216,6 +283,7 @@ export async function GET(req: NextRequest) {
         discountTotal: Number(r.discount_total),
         txnCount: Number(r.txn_count),
       })),
+      overallTimeSeries,
       byCampaign: byCampaignRes.rows.map((r: Record<string, unknown>) => ({
         campaign: String(r.campaign_code),
         qtyAll: Number(r.qty_all),
@@ -233,6 +301,7 @@ export async function GET(req: NextRequest) {
         discountTotal: Number(r.discount_total),
         txnCount: Number(r.txn_count),
       })),
+      overallStores,
       spgLeaderboard: spgRes.rows.map((r: Record<string, unknown>) => ({
         spg: r.spg,
         qtyPromo: Number(r.qty_promo),
