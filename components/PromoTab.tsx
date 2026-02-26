@@ -101,7 +101,7 @@ function fmt(n: number, type: "currency" | "int" | "decimal" | "pct"): string {
     if (n >= 1_000_000) return `Rp ${(n / 1_000_000).toFixed(0)}jt`;
     return "Rp " + Math.round(n).toLocaleString("en-US");
   }
-  if (type === "pct") return `${n.toFixed(1)}%`;
+  if (type === "pct") return `${(n * 100).toFixed(1)}%`;
   if (type === "decimal") {
     return n.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   }
