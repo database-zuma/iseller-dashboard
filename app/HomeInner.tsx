@@ -11,12 +11,14 @@ import BranchPieChart from "@/components/BranchPieChart";
 import StoreTable from "@/components/StoreTable";
 import SkuCharts from "@/components/SkuCharts";
 import DetailTable from "@/components/DetailTable";
+import PromoTab from "@/components/PromoTab";
 
 const TABS = [
   { id: "summary", label: "Executive Summary" },
   { id: "sku", label: "SKU Chart" },
   { id: "detail", label: "Detail (Kode)" },
   { id: "detail-size", label: "Detail Size (Kode Besar)" },
+  { id: "promo", label: "Promo Monitor" },
 ] as const;
 
 interface DashboardData {
@@ -177,6 +179,7 @@ export default function HomeInner() {
 
           {activeTab === "detail" && <DetailTable mode="kode" />}
           {activeTab === "detail-size" && <DetailTable mode="kode_besar" />}
+          {activeTab === "promo" && <PromoTab />}
         </main>
         <footer className="text-[10px] text-muted-foreground pt-4 border-t border-border flex items-center gap-1.5">
           <div className="w-1.5 h-1.5 rounded-full bg-[#00E273]" />
