@@ -13,6 +13,9 @@ function parseMulti(sp: URLSearchParams, key: string): string[] {
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
 
+  /* ───── grab a SINGLE connection to avoid pool exhaustion ───── */
+  const client = await pool.connect();
+
   try {
     /* ───── shared filter building ───── */
     const vals: unknown[] = [];
@@ -82,96 +85,88 @@ export async function GET(req: NextRequest) {
     }
     const txnWhere = txnConds.length ? `WHERE ${txnConds.join(" AND ")}` : "";
 
-    /* ───── parallel queries ───── */
-    const [
-      kpiRes,
-      overallPairsRes,
-      overallTxnRes,
-      timeSeriesRes,
-      byCampaignRes,
-      storeRes,
-      spgRes,
-      campaignOptionsRes,
-    ] = await Promise.all([
-      // Mode A KPIs: promo struks only
-      pool.query(
-        `SELECT SUM(p.qty_all) AS qty_all,
-                SUM(p.qty_promo) AS qty_promo,
-                SUM(p.revenue) AS revenue,
-                SUM(p.discount_total) AS discount_total,
-                SUM(p.txn_count) AS txn_count
-         FROM mart.mv_iseller_promo p ${where}`,
-        vals
-      ),
-      // Mode B: overall pairs+revenue during same period
-      pool.query(
-        `SELECT SUM(d.pairs) AS pairs, SUM(d.revenue) AS revenue
-         FROM mart.mv_iseller_summary d ${mvWhere}`,
-        mvVals
-      ),
-      // Mode B: overall txn count
-      pool.query(
-        `SELECT SUM(t.txn_count) AS txn_count
-         FROM mart.mv_iseller_txn_agg t ${txnWhere}`,
-        txnVals
-      ),
-      // Time series (daily)
-      pool.query(
-        `SELECT p.sale_date AS period,
-                SUM(p.qty_all) AS qty_all,
-                SUM(p.qty_promo) AS qty_promo,
-                SUM(p.revenue) AS revenue,
-                SUM(p.discount_total) AS discount_total,
-                SUM(p.txn_count) AS txn_count
-         FROM mart.mv_iseller_promo p ${where}
-         GROUP BY p.sale_date ORDER BY p.sale_date`,
-        vals
-      ),
-      // By campaign breakdown
-      pool.query(
-        `SELECT p.campaign_code,
-                SUM(p.qty_all) AS qty_all,
-                SUM(p.qty_promo) AS qty_promo,
-                SUM(p.revenue) AS revenue,
-                SUM(p.discount_total) AS discount_total,
-                SUM(p.txn_count) AS txn_count
-         FROM mart.mv_iseller_promo p ${where}
-         GROUP BY p.campaign_code ORDER BY revenue DESC`,
-        vals
-      ),
-      // Store breakdown
-      pool.query(
-        `SELECT p.toko, p.branch,
-                SUM(p.qty_all) AS qty_all,
-                SUM(p.qty_promo) AS qty_promo,
-                SUM(p.revenue) AS revenue,
-                SUM(p.discount_total) AS discount_total,
-                SUM(p.txn_count) AS txn_count
-         FROM mart.mv_iseller_promo p ${where}
-         GROUP BY p.toko, p.branch ORDER BY revenue DESC`,
-        vals
-      ),
-      // SPG leaderboard
-      pool.query(
-        `SELECT p.spg,
-                SUM(p.qty_promo) AS qty_promo,
-                SUM(p.qty_all) AS qty_all,
-                SUM(p.revenue) AS revenue,
-                SUM(p.txn_count) AS txn_count
-         FROM mart.mv_iseller_promo p ${where}
-         WHERE p.spg != 'Unknown'
-         GROUP BY p.spg ORDER BY qty_promo DESC
-         LIMIT 50`,
-        vals
-      ),
-      // Campaign filter options (always unfiltered by campaign)
-      pool.query(
-        `SELECT pc.campaign_code, pc.campaign_name
-         FROM portal.promo_campaign pc
-         WHERE EXISTS (SELECT 1 FROM mart.mv_iseller_promo m WHERE m.campaign_code = pc.campaign_code)
-         ORDER BY pc.campaign_name`
-      ),
-    ]);
+    /* ───── SPG where clause ───── */
+    const spgWhere = conds.length
+      ? `WHERE ${conds.join(" AND ")} AND p.spg != 'Unknown'`
+      : "WHERE p.spg != 'Unknown'";
+
+    /* ───── sequential queries on single connection ───── */
+    const kpiRes = await client.query(
+      `SELECT SUM(p.qty_all) AS qty_all,
+              SUM(p.qty_promo) AS qty_promo,
+              SUM(p.revenue) AS revenue,
+              SUM(p.discount_total) AS discount_total,
+              SUM(p.txn_count) AS txn_count
+       FROM mart.mv_iseller_promo p ${where}`,
+      vals
+    );
+
+    const timeSeriesRes = await client.query(
+      `SELECT p.sale_date AS period,
+              SUM(p.qty_all) AS qty_all,
+              SUM(p.qty_promo) AS qty_promo,
+              SUM(p.revenue) AS revenue,
+              SUM(p.discount_total) AS discount_total,
+              SUM(p.txn_count) AS txn_count
+       FROM mart.mv_iseller_promo p ${where}
+       GROUP BY p.sale_date ORDER BY p.sale_date`,
+      vals
+    );
+
+    const byCampaignRes = await client.query(
+      `SELECT p.campaign_code,
+              SUM(p.qty_all) AS qty_all,
+              SUM(p.qty_promo) AS qty_promo,
+              SUM(p.revenue) AS revenue,
+              SUM(p.discount_total) AS discount_total,
+              SUM(p.txn_count) AS txn_count
+       FROM mart.mv_iseller_promo p ${where}
+       GROUP BY p.campaign_code ORDER BY revenue DESC`,
+      vals
+    );
+
+    const storeRes = await client.query(
+      `SELECT p.toko, p.branch,
+              SUM(p.qty_all) AS qty_all,
+              SUM(p.qty_promo) AS qty_promo,
+              SUM(p.revenue) AS revenue,
+              SUM(p.discount_total) AS discount_total,
+              SUM(p.txn_count) AS txn_count
+       FROM mart.mv_iseller_promo p ${where}
+       GROUP BY p.toko, p.branch ORDER BY revenue DESC`,
+      vals
+    );
+
+    const overallPairsRes = await client.query(
+      `SELECT SUM(d.pairs) AS pairs, SUM(d.revenue) AS revenue
+       FROM mart.mv_iseller_summary d ${mvWhere}`,
+      mvVals
+    );
+
+    const overallTxnRes = await client.query(
+      `SELECT SUM(t.txn_count) AS txn_count
+       FROM mart.mv_iseller_txn_agg t ${txnWhere}`,
+      txnVals
+    );
+
+    const spgRes = await client.query(
+      `SELECT p.spg,
+              SUM(p.qty_promo) AS qty_promo,
+              SUM(p.qty_all) AS qty_all,
+              SUM(p.revenue) AS revenue,
+              SUM(p.txn_count) AS txn_count
+       FROM mart.mv_iseller_promo p ${spgWhere}
+       GROUP BY p.spg ORDER BY qty_promo DESC
+       LIMIT 50`,
+      vals
+    );
+
+    const campaignOptionsRes = await client.query(
+      `SELECT pc.campaign_code, pc.campaign_name
+       FROM portal.promo_campaign pc
+       WHERE EXISTS (SELECT 1 FROM mart.mv_iseller_promo m WHERE m.campaign_code = pc.campaign_code)
+       ORDER BY pc.campaign_name`
+    );
 
     /* ───── Mode A KPIs ───── */
     const k = kpiRes.rows[0] ?? {};
@@ -257,5 +252,7 @@ export async function GET(req: NextRequest) {
   } catch (e) {
     console.error("promo error:", e);
     return NextResponse.json({ error: "DB error" }, { status: 500 });
+  } finally {
+    client.release();
   }
 }
