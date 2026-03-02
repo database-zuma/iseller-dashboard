@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { MetisProvider } from "@/providers/metis-provider";
+import { MetisWidget } from "@/components/metis/metis-widget";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -13,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "iSeller Dashboard Zuma",
-  description: "Zuma Indonesia · iSeller POS Analytics Dashboard",
+  title: "iSeller AI Dashboard - Zuma",
+  description: "Zuma Indonesia · iSeller POS Analytics Dashboard with Metis AI",
 };
 
 export default function RootLayout({
@@ -24,10 +26,23 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        {/* Disable Vercel toolbar on preview deployments */}
+        <style dangerouslySetInnerHTML={{ __html: `
+          vercel-live-feedback,
+          vercel-toolbar,
+          #vercel-live-feedback,
+          #__vercel-toolbar-portal,
+          [data-vercel-toolbar] { display: none !important; }
+        ` }} />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <MetisProvider>
+          {children}
+          <MetisWidget />
+        </MetisProvider>
       </body>
     </html>
   );
