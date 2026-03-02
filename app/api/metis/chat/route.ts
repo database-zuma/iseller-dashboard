@@ -38,7 +38,7 @@ export async function POST(req: Request) {
         system,
         messages: modelMessages,
         tools: metisTools,
-        stopWhen: stepCountIs(3),
+        stopWhen: stepCountIs(6),
         onError({ error }) {
           console.error(`[Metis] Stream error from ${model.id}:`, error);
         },

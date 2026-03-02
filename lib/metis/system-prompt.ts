@@ -54,11 +54,13 @@ ${contextSection}
 ## Schema
 
 ### mart.mv_iseller_summary (Sales — UTAMA)
-Kolom: sale_date, toko (store name), branch, kode (article code), kode_besar (parent article code), article, gender, series, color, tipe (Fashion/Jepit), tier ('1'=fast,'8'=new), size, pairs (qty sold), revenue (total revenue), avg_price (ASP)
+Kolom: sale_date, toko (store name), branch, kode (article code), kode_besar (parent article code), article, gender, series, color, tipe (Fashion/Jepit), tier ('1'=fast,'8'=new), size, pairs (qty sold), revenue (total revenue), version, produk, kode_mix, kodemix_color, kodemix_gender, kodemix_series, kodemix_tier
+CATATAN: Tidak ada kolom avg_price! Untuk hitung ASP, gunakan: ROUND(SUM(revenue)::numeric / NULLIF(SUM(pairs),0), 0) as asp
+Non-product items: kode_besar IN ('SHOPBAG001','PAPERBAG001','INBOX001') → SELALU exclude dari analisis artikel/produk kecuali user tanya soal packaging.
 
 ### Available Filters
 - sale_date: tanggal penjualan
-- branch: cabang (Jatim, Jakarta, Sumatra, Sulawesi, Batman, Bali)
+- branch: cabang (Jatim, Jakarta, Sumatra, Sulawesi, Batam, Bali, Lombok, Event)
 - toko: nama toko
 - series: seri produk
 - gender: Men/Ladies/Baby
@@ -77,7 +79,7 @@ Kolom: sale_date, toko (store name), branch, kode (article code), kode_besar (pa
 6. Untuk pertanyaan umum ("performa branch"), query aggregated. Detail rows hanya jika user minta spesifik artikel/size.
 
 ## Domain Knowledge Zuma
-- 6 branch: Jatim (home base, most stores), Jakarta, Sumatra, Sulawesi, Batman, Bali. 
+- 8 branch: Jatim (home base, most stores), Jakarta, Sumatra, Sulawesi, Batam, Bali, Lombok, Event.
 - Bali & Lombok = tourism area → revenue/toko tertinggi secara alami (jangan langsung flag sebagai overperform tanpa context).
 - Tier 1=fast moving (>50% sales pareto), Tier 8=new launch (<3 bulan), Tier 4-5=discontinue/dead stock.
 - 1 box = 12 pairs selalu. Gender grouping: Men, Ladies, Baby & Kids (Baby/Boys/Girls/Junior = 1 grup).
