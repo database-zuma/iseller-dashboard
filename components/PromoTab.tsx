@@ -27,7 +27,7 @@ interface PromoKpis {
   revenue: number;
   discountTotal: number;
   txnCount: number;
-  promoShare: number;
+  promoPairsShare: number;
   atu: number;
   asp: number;
   atv: number;
@@ -461,7 +461,7 @@ export default function PromoTab() {
   const ROW1_CARDS: { label: string; value: number | undefined; type: "currency" | "int" | "decimal" | "pct" }[] = [
     { label: "QTY All", value: data?.promoKpis?.qtyAll, type: "int" },
     { label: "QTY Promo", value: data?.promoKpis?.qtyPromo, type: "int" },
-    { label: "% Promo Share", value: data?.promoKpis?.promoShare, type: "pct" },
+    { label: "% Promo Pairs Share", value: data?.promoKpis?.promoPairsShare, type: "pct" },
     { label: "Revenue", value: data?.promoKpis?.revenue, type: "currency" },
     { label: "Discount Total", value: data?.promoKpis?.discountTotal, type: "currency" },
     { label: "TXN", value: data?.promoKpis?.txnCount, type: "int" },

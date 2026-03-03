@@ -212,13 +212,16 @@ export async function GET(req: NextRequest) {
     const discountTotal = Number(k.discount_total || 0);
     const txnCount = Number(k.txn_count || 0);
 
+    // Overall pairs for promo share denominator (no campaign filter)
+    const overallPairsForShare = Number(overallPairsRes.rows[0]?.pairs || 0);
+
     const promoKpis = {
       qtyAll,
       qtyPromo,
       revenue,
       discountTotal,
       txnCount,
-      promoShare: qtyAll > 0 ? qtyPromo / qtyAll : 0,
+      promoPairsShare: overallPairsForShare > 0 ? qtyPromo / overallPairsForShare : 0,
       atu: txnCount > 0 ? qtyAll / txnCount : 0,
       asp: qtyAll > 0 ? revenue / qtyAll : 0,
       atv: txnCount > 0 ? revenue / txnCount : 0,

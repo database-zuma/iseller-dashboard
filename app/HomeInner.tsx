@@ -13,10 +13,12 @@ import SkuCharts from "@/components/SkuCharts";
 import DetailTable from "@/components/DetailTable";
 import PromoTab from "@/components/PromoTab";
 import HourlyGraph from "@/components/HourlyGraph";
+import StoreAchievement from "@/components/StoreAchievement";
 import { useMetisContext } from "@/providers/metis-provider";
 
 const TABS = [
   { id: "summary", label: "Executive Summary" },
+  { id: "achievement", label: "Store Achievement" },
   { id: "sku", label: "SKU Chart" },
   { id: "detail", label: "Detail (Kode)" },
   { id: "detail-size", label: "Detail Size (Kode Besar)" },
@@ -44,8 +46,6 @@ interface DashboardData {
     atu: number;
     asp: number;
     atv: number;
-    target: number | null;
-    achievementPct: number | null;
   }[];
   byBranch: { branch: string; revenue: number }[];
   bySeries: { series: string; pairs: number }[];
@@ -203,6 +203,7 @@ export default function HomeInner() {
               </div>
             </div>
           )}
+          {activeTab === "achievement" && <StoreAchievement />}
           {activeTab === "sku" && (
             <SkuCharts
               data={{
