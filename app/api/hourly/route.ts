@@ -4,6 +4,9 @@ import pool from "@/lib/db";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
+/** Max store lines to return for the by-store chart */
+const MAX_STORES = 20;
+
 function parseMulti(sp: URLSearchParams, key: string): string[] {
   const val = sp.get(key);
   if (!val) return [];
@@ -12,7 +15,6 @@ function parseMulti(sp: URLSearchParams, key: string): string[] {
 
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
-
   const client = await pool.connect();
 
   try {
@@ -44,53 +46,30 @@ export async function GET(req: NextRequest) {
 
     const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
 
-    /* ── Run all queries in parallel ── */
-    const [weeklyRes, byBranchWeeklyRes, hourlyRes, byBranchRes, dateRangeRes] = await Promise.all([
-      /* Weekly aggregation: DOW (1=Mon..7=Sun) × hour (0-23) = 168 points */
+    /* ── Run queries in parallel ── */
+    const [timelineRes, byStoreRes, dateRangeRes] = await Promise.all([
+      /* Total timeline: date × hour */
       client.query(
-        `SELECT EXTRACT(ISODOW FROM h.sale_date)::int AS dow,
+        `SELECT h.sale_date::text AS sale_date,
                 h.hour_wib,
-                SUM(h.pairs) AS pairs,
-                SUM(h.revenue) AS revenue,
-                SUM(h.transactions) AS transactions
+                SUM(h.pairs)::int AS pairs,
+                SUM(h.revenue)::bigint AS revenue,
+                SUM(h.transactions)::int AS transactions
          FROM mart.iseller_hourly h ${where}
-         GROUP BY EXTRACT(ISODOW FROM h.sale_date)::int, h.hour_wib
-         ORDER BY dow, h.hour_wib`,
+         GROUP BY h.sale_date, h.hour_wib
+         ORDER BY h.sale_date, h.hour_wib`,
         vals
       ),
-      /* By-branch weekly breakdown */
+      /* By-store timeline: toko × date × hour (pairs + transactions only) */
       client.query(
-        `SELECT h.branch,
-                EXTRACT(ISODOW FROM h.sale_date)::int AS dow,
+        `SELECT h.toko,
+                h.sale_date::text AS sale_date,
                 h.hour_wib,
-                SUM(h.pairs) AS pairs,
-                SUM(h.revenue) AS revenue,
-                SUM(h.transactions) AS transactions
+                SUM(h.pairs)::int AS pairs,
+                SUM(h.transactions)::int AS transactions
          FROM mart.iseller_hourly h ${where}
-         GROUP BY h.branch, EXTRACT(ISODOW FROM h.sale_date)::int, h.hour_wib
-         ORDER BY h.branch, dow, h.hour_wib`,
-        vals
-      ),
-      /* Hour-only aggregation (for table + KPIs) */
-      client.query(
-        `SELECT h.hour_wib,
-                SUM(h.pairs) AS pairs,
-                SUM(h.revenue) AS revenue,
-                SUM(h.transactions) AS transactions
-         FROM mart.iseller_hourly h ${where}
-         GROUP BY h.hour_wib
-         ORDER BY h.hour_wib`,
-        vals
-      ),
-      /* By-branch hour-only (kept for backward compat) */
-      client.query(
-        `SELECT h.branch, h.hour_wib,
-                SUM(h.pairs) AS pairs,
-                SUM(h.revenue) AS revenue,
-                SUM(h.transactions) AS transactions
-         FROM mart.iseller_hourly h ${where}
-         GROUP BY h.branch, h.hour_wib
-         ORDER BY h.branch, h.hour_wib`,
+         GROUP BY h.toko, h.sale_date, h.hour_wib
+         ORDER BY h.toko, h.sale_date, h.hour_wib`,
         vals
       ),
       /* Actual date range in the data */
@@ -102,143 +81,100 @@ export async function GET(req: NextRequest) {
       ),
     ]);
 
-    /* ── Build weekly (168 points) ── */
-    const weeklyMap = new Map<string, { pairs: number; revenue: number; transactions: number }>();
-    for (let d = 1; d <= 7; d++) {
+    /* ── Build date list ── */
+    const minDate = dateRangeRes.rows[0]?.min_date;
+    const maxDate = dateRangeRes.rows[0]?.max_date;
+    const dates: string[] = [];
+
+    if (minDate && maxDate) {
+      const d = new Date(minDate + "T00:00:00");
+      const end = new Date(maxDate + "T00:00:00");
+      while (d <= end) {
+        dates.push(d.toISOString().substring(0, 10));
+        d.setDate(d.getDate() + 1);
+      }
+    }
+
+    const totalSlots = dates.length * 24;
+
+    /* ── Build slot index map: "date|hour" → array index ── */
+    const slotIndex = new Map<string, number>();
+    let idx = 0;
+    for (const date of dates) {
       for (let h = 0; h < 24; h++) {
-        weeklyMap.set(`${d}-${h}`, { pairs: 0, revenue: 0, transactions: 0 });
-      }
-    }
-    for (const r of weeklyRes.rows) {
-      weeklyMap.set(`${r.dow}-${r.hour_wib}`, {
-        pairs: Number(r.pairs),
-        revenue: Number(r.revenue),
-        transactions: Number(r.transactions),
-      });
-    }
-
-    const weekly: { dow: number; hour: number; pairs: number; revenue: number; transactions: number }[] = [];
-    for (let d = 1; d <= 7; d++) {
-      for (let h = 0; h < 24; h++) {
-        const data = weeklyMap.get(`${d}-${h}`)!;
-        weekly.push({ dow: d, hour: h, ...data });
+        slotIndex.set(`${date}|${h}`, idx++);
       }
     }
 
-    /* ── By-branch weekly ── */
-    const branchWeeklyMap = new Map<string, Map<string, { pairs: number; revenue: number; transactions: number }>>();
-    for (const r of byBranchWeeklyRes.rows) {
-      const branch = String(r.branch || "Unknown");
-      if (!branchWeeklyMap.has(branch)) {
-        const m = new Map<string, { pairs: number; revenue: number; transactions: number }>();
-        for (let d = 1; d <= 7; d++) {
-          for (let h = 0; h < 24; h++) {
-            m.set(`${d}-${h}`, { pairs: 0, revenue: 0, transactions: 0 });
-          }
-        }
-        branchWeeklyMap.set(branch, m);
+    /* ── Fill total timeline (flat arrays) ── */
+    const pairs = new Array<number>(totalSlots).fill(0);
+    const revenue = new Array<number>(totalSlots).fill(0);
+    const transactions = new Array<number>(totalSlots).fill(0);
+
+    for (const r of timelineRes.rows) {
+      const si = slotIndex.get(`${r.sale_date}|${r.hour_wib}`);
+      if (si !== undefined) {
+        pairs[si] = Number(r.pairs);
+        revenue[si] = Number(r.revenue);
+        transactions[si] = Number(r.transactions);
       }
-      branchWeeklyMap.get(branch)!.set(`${r.dow}-${r.hour_wib}`, {
-        pairs: Number(r.pairs),
-        revenue: Number(r.revenue),
-        transactions: Number(r.transactions),
-      });
     }
 
-    const byBranchWeekly = Array.from(branchWeeklyMap.entries()).map(([branch, dmap]) => {
-      const points: { dow: number; hour: number; pairs: number; revenue: number; transactions: number }[] = [];
-      for (let d = 1; d <= 7; d++) {
-        for (let h = 0; h < 24; h++) {
-          const data = dmap.get(`${d}-${h}`)!;
-          points.push({ dow: d, hour: h, ...data });
-        }
-      }
-      return { branch, weekly: points };
-    });
+    /* ── Fill by-store data ── */
+    const storeMap = new Map<string, { pairs: number[]; transactions: number[]; total: number }>();
 
-    /* ── Day-of-week summary (7 rows) ── */
-    const dowSummary: { dow: number; pairs: number; revenue: number; transactions: number }[] = [];
-    for (let d = 1; d <= 7; d++) {
-      let pairs = 0, revenue = 0, transactions = 0;
-      for (let h = 0; h < 24; h++) {
-        const data = weeklyMap.get(`${d}-${h}`)!;
-        pairs += data.pairs;
-        revenue += data.revenue;
-        transactions += data.transactions;
+    for (const r of byStoreRes.rows) {
+      const store = String(r.toko || "Unknown");
+      if (!storeMap.has(store)) {
+        storeMap.set(store, {
+          pairs: new Array<number>(totalSlots).fill(0),
+          transactions: new Array<number>(totalSlots).fill(0),
+          total: 0,
+        });
       }
-      dowSummary.push({ dow: d, pairs, revenue, transactions });
+      const si = slotIndex.get(`${r.sale_date}|${r.hour_wib}`);
+      if (si !== undefined) {
+        const entry = storeMap.get(store)!;
+        const p = Number(r.pairs);
+        entry.pairs[si] = p;
+        entry.transactions[si] = Number(r.transactions);
+        entry.total += p;
+      }
     }
 
-    /* ── Fill all 24 hours (for backward compat table) ── */
-    const hourMap = new Map<number, { pairs: number; revenue: number; transactions: number }>();
-    for (let h = 0; h < 24; h++) {
-      hourMap.set(h, { pairs: 0, revenue: 0, transactions: 0 });
-    }
-    for (const r of hourlyRes.rows) {
-      hourMap.set(Number(r.hour_wib), {
-        pairs: Number(r.pairs),
-        revenue: Number(r.revenue),
-        transactions: Number(r.transactions),
-      });
-    }
-    const hourly = Array.from(hourMap.entries())
-      .sort((a, b) => a[0] - b[0])
-      .map(([hour, data]) => ({ hour, ...data }));
-
-    /* ── By-branch hourly (backward compat) ── */
-    const branchMap = new Map<string, Map<number, { pairs: number; revenue: number; transactions: number }>>();
-    for (const r of byBranchRes.rows) {
-      const branch = String(r.branch || "Unknown");
-      if (!branchMap.has(branch)) {
-        const m = new Map<number, { pairs: number; revenue: number; transactions: number }>();
-        for (let h = 0; h < 24; h++) m.set(h, { pairs: 0, revenue: 0, transactions: 0 });
-        branchMap.set(branch, m);
-      }
-      branchMap.get(branch)!.set(Number(r.hour_wib), {
-        pairs: Number(r.pairs),
-        revenue: Number(r.revenue),
-        transactions: Number(r.transactions),
-      });
-    }
-    const byBranch = Array.from(branchMap.entries()).map(([branch, hours]) => ({
-      branch,
-      hourly: Array.from(hours.entries())
-        .sort((a, b) => a[0] - b[0])
-        .map(([hour, data]) => ({ hour, ...data })),
-    }));
+    /* Sort by total pairs desc, keep top N */
+    const byStore = Array.from(storeMap.entries())
+      .sort((a, b) => b[1].total - a[1].total)
+      .slice(0, MAX_STORES)
+      .map(([store, data]) => ({
+        store,
+        pairs: data.pairs,
+        transactions: data.transactions,
+      }));
 
     /* ── KPIs ── */
-    const totalPairs = hourly.reduce((s, h) => s + h.pairs, 0);
-    const totalRevenue = hourly.reduce((s, h) => s + h.revenue, 0);
-    const totalTxn = hourly.reduce((s, h) => s + h.transactions, 0);
+    const totalPairs = pairs.reduce((s, v) => s + v, 0);
+    const totalRevenue = revenue.reduce((s, v) => s + v, 0);
+    const totalTxn = transactions.reduce((s, v) => s + v, 0);
 
-    /* Peak: find the DOW+hour combo with most pairs */
-    const peakWeekly = weekly.reduce((max, p) => p.pairs > max.pairs ? p : max, weekly[0]);
-    const peakHour = hourly.reduce((max, h) => h.pairs > max.pairs ? h : max, hourly[0]);
+    let peakSlot = 0;
+    for (let si = 1; si < totalSlots; si++) {
+      if (pairs[si] > pairs[peakSlot]) peakSlot = si;
+    }
 
-    /* Date range */
-    const dateRange = {
-      from: dateRangeRes.rows[0]?.min_date || null,
-      to: dateRangeRes.rows[0]?.max_date || null,
-    };
+    const peakDate = totalSlots > 0 ? dates[Math.floor(peakSlot / 24)] ?? null : null;
+    const peakHour = totalSlots > 0 ? peakSlot % 24 : 0;
+    const peakPairs = totalSlots > 0 ? pairs[peakSlot] ?? 0 : 0;
 
     const body = {
-      weekly,
-      byBranchWeekly,
-      dowSummary,
-      hourly,
-      byBranch,
-      dateRange,
-      kpis: {
-        totalPairs,
-        totalRevenue,
-        totalTxn,
-        peakHour: peakHour.hour,
-        peakPairs: peakHour.pairs,
-        peakWeeklyDow: peakWeekly.dow,
-        peakWeeklyHour: peakWeekly.hour,
-        peakWeeklyPairs: peakWeekly.pairs,
-      },
+      dates,
+      pairs,
+      revenue,
+      transactions,
+      byStore,
+      storeCount: storeMap.size,
+      dateRange: { from: minDate || null, to: maxDate || null },
+      kpis: { totalPairs, totalRevenue, totalTxn, peakDate, peakHour, peakPairs },
     };
 
     return NextResponse.json(body, {
