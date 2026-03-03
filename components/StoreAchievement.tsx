@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { toCSV, downloadCSV, downloadXLSX } from "@/lib/export";
@@ -56,14 +56,8 @@ export default function StoreAchievement() {
     dedupingInterval: 120000,
   });
 
-  const [yearFilter, setYearFilter] = useState<"all" | "2025" | "2026">("2026");
 
   const months = data?.months ?? [];
-  const filteredMonths =
-    yearFilter === "all"
-      ? months
-      : months.filter((m) => m.key.startsWith(yearFilter));
-
   const stores = data?.stores ?? [];
 
   // Export handler
@@ -71,13 +65,13 @@ export default function StoreAchievement() {
     if (!data) return;
     const headers = ["#", "Store", "Branch"];
     const keys = ["rank", "toko", "branch"];
-    for (const m of filteredMonths) {
+    for (const m of months) {
       headers.push(`${m.label} Qty`, `${m.label} Rev`, `${m.label} Target`, `${m.label} Ach%`);
       keys.push(`${m.key}_qty`, `${m.key}_rev`, `${m.key}_target`, `${m.key}_ach`);
     }
     const rows: Record<string, unknown>[] = stores.map((s, idx) => {
       const row: Record<string, unknown> = { rank: idx + 1, toko: s.toko, branch: s.branch };
-      for (const m of filteredMonths) {
+      for (const m of months) {
         const d = s.monthly[m.key];
         row[`${m.key}_qty`] = d?.qty ?? 0;
         row[`${m.key}_rev`] = d?.revenue ?? 0;
@@ -106,23 +100,6 @@ export default function StoreAchievement() {
           </span>
         </div>
         <div className="flex items-center gap-2">
-          {/* Year filter */}
-          <div className="flex gap-0.5">
-            {(["2025", "2026", "all"] as const).map((y) => (
-              <button
-                key={y}
-                type="button"
-                onClick={() => setYearFilter(y)}
-                className={`px-2.5 py-1 text-[9px] font-semibold rounded-sm border transition-colors ${
-                  yearFilter === y
-                    ? "bg-[#00E273]/15 border-[#00E273]/40 text-foreground"
-                    : "border-border text-muted-foreground hover:bg-muted"
-                }`}
-              >
-                {y === "all" ? "All" : y}
-              </button>
-            ))}
-          </div>
           {/* Export buttons */}
           {!isLoading && stores.length > 0 && (
             <div className="flex gap-1">
@@ -148,7 +125,7 @@ export default function StoreAchievement() {
               <th className={`${thBase} text-center sticky left-0 z-20 bg-muted/40 w-8 border-r border-border/30`} rowSpan={2}>#</th>
               <th className={`${thBase} text-left sticky left-8 z-20 bg-muted/40 min-w-[160px] border-r border-border/30`} rowSpan={2}>Store</th>
               <th className={`${thBase} text-left sticky left-[224px] z-20 bg-muted/40 min-w-[70px] border-r border-border`} rowSpan={2}>Branch</th>
-              {filteredMonths.map((m) => (
+              {months.map((m) => (
                 <th
                   key={m.key}
                   colSpan={4}
@@ -162,7 +139,7 @@ export default function StoreAchievement() {
             </tr>
             {/* Row 2: Sub-headers per month */}
             <tr className="border-b border-border bg-muted/20">
-              {filteredMonths.map((m) => (
+              {months.map((m) => (
                 <Fragment key={`sub-${m.key}`}>
                   <th className={`${thBase} text-right ${m.key.endsWith("-01") ? "border-l-2 border-l-border" : "border-l border-border/40"}`}>Qty</th>
                   <th className={`${thBase} text-right`}>Rev</th>
@@ -179,7 +156,7 @@ export default function StoreAchievement() {
                   <td className="px-2 py-2 sticky left-0 bg-card"><div className="h-3 bg-muted animate-pulse rounded-sm w-4" /></td>
                   <td className="px-2 py-2 sticky left-8 bg-card"><div className="h-3 bg-muted animate-pulse rounded-sm w-28" /></td>
                   <td className="px-2 py-2 sticky left-[224px] bg-card"><div className="h-3 bg-muted animate-pulse rounded-sm w-12" /></td>
-                  {filteredMonths.map((m) => (
+                  {months.map((m) => (
                     <Fragment key={`sk-${m.key}`}>
                       {Array.from({ length: 4 }, (_, j) => (
                         <td key={`sk-${m.key}-${String(j)}`} className="px-2 py-2">
@@ -196,7 +173,7 @@ export default function StoreAchievement() {
                   <td className={`${tdBase} text-center sticky left-0 z-10 bg-card text-muted-foreground font-medium border-r border-border/30`}>{idx + 1}</td>
                   <td className={`${tdBase} sticky left-8 z-10 bg-card font-medium text-foreground max-w-[160px] truncate border-r border-border/30`}>{s.toko}</td>
                   <td className={`${tdBase} sticky left-[224px] z-10 bg-card text-muted-foreground border-r border-border`}>{s.branch}</td>
-                  {filteredMonths.map((m) => {
+                  {months.map((m) => {
                     const d = s.monthly[m.key] || { qty: 0, revenue: 0, target: null, achievementPct: null };
                     return (
                       <Fragment key={`${s.toko}-${m.key}`}>
@@ -219,7 +196,7 @@ export default function StoreAchievement() {
               ))
             ) : (
               <tr>
-                <td colSpan={3 + filteredMonths.length * 4} className="px-4 py-8 text-center text-muted-foreground text-xs">
+                <td colSpan={3 + months.length * 4} className="px-4 py-8 text-center text-muted-foreground text-xs">
                   No data
                 </td>
               </tr>
@@ -232,7 +209,7 @@ export default function StoreAchievement() {
                 <td className={`${tdBase} text-center sticky left-0 z-10 bg-muted/40 font-bold text-foreground border-r border-border/30`} colSpan={3}>
                   TOTAL ({stores.length} stores)
                 </td>
-                {filteredMonths.map((m) => {
+                {months.map((m) => {
                   const totQty = stores.reduce((sum, s) => sum + (s.monthly[m.key]?.qty ?? 0), 0);
                   const totRev = stores.reduce((sum, s) => sum + (s.monthly[m.key]?.revenue ?? 0), 0);
                   const totTarget = stores.reduce((sum, s) => sum + (s.monthly[m.key]?.target ?? 0), 0);
