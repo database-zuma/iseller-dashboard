@@ -12,6 +12,7 @@ import StoreTable from "@/components/StoreTable";
 import SkuCharts from "@/components/SkuCharts";
 import DetailTable from "@/components/DetailTable";
 import PromoTab from "@/components/PromoTab";
+import HourlyGraph from "@/components/HourlyGraph";
 import { useMetisContext } from "@/providers/metis-provider";
 
 const TABS = [
@@ -20,6 +21,7 @@ const TABS = [
   { id: "detail", label: "Detail (Kode)" },
   { id: "detail-size", label: "Detail Size (Kode Besar)" },
   { id: "promo", label: "Promo Monitor" },
+  { id: "hourly", label: "Hourly Graph" },
 ] as const;
 
 interface DashboardData {
@@ -219,6 +221,7 @@ export default function HomeInner() {
           {activeTab === "detail" && <DetailTable mode="kode" />}
           {activeTab === "detail-size" && <DetailTable mode="kode_besar" />}
           {activeTab === "promo" && <PromoTab />}
+          {activeTab === "hourly" && <HourlyGraph />}
         </main>
         <footer className="text-[10px] text-muted-foreground pt-4 border-t border-border flex items-center gap-1.5">
           <div className="w-1.5 h-1.5 rounded-full bg-[#00E273]" />
