@@ -87,14 +87,6 @@ function fmt(n: number, type: "currency" | "int"): string {
   return Math.round(n).toLocaleString("en-US");
 }
 
-/** 24 distinct colors for store lines */
-const STORE_COLORS = [
-  "#3B82F6", "#EF4444", "#F59E0B", "#8B5CF6", "#EC4899", "#06B6D4",
-  "#84CC16", "#F97316", "#6366F1", "#14B8A6", "#E11D48", "#0EA5E9",
-  "#A3E635", "#FB923C", "#818CF8", "#2DD4BF", "#F43F5E", "#38BDF8",
-  "#BEF264", "#FDBA74",
-];
-
 /* ─── component ─────────────────────────────────────── */
 
 export default function HourlyGraph() {
@@ -196,25 +188,6 @@ export default function HourlyGraph() {
     return { labels, datasets };
   }, [labels, data?.pairs, data?.lastYear, showLastYear]);
 
-  /* ── Chart 2: By Store (multiple lines) ── */
-  const storeChartData = useMemo(() => {
-    if (!data?.byStore?.length) return null;
-    return {
-      labels,
-      datasets: data.byStore.map((s, idx) => ({
-        label: s.store.replace(/^Zuma\s*/i, ""),
-        data: s.pairs,
-        borderColor: STORE_COLORS[idx % STORE_COLORS.length],
-        backgroundColor: "transparent",
-        fill: false,
-        tension: 0.3,
-        pointRadius: 0,
-        pointHoverRadius: 4,
-        pointBackgroundColor: STORE_COLORS[idx % STORE_COLORS.length],
-        borderWidth: 1.8,
-      })),
-    };
-  }, [labels, data?.byStore]);
 
   /* ── Shared X-axis tick callback ── */
   const xTickCallback = useMemo(() => {
@@ -322,61 +295,6 @@ export default function HourlyGraph() {
     },
   }), [slotMeta, data?.transactions, xTickCallback, showLastYear]);
 
-  /* ── Chart 2 options (per store) ── */
-  const storeChartOptions = useMemo(() => ({
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: { mode: "index" as const, intersect: false },
-    plugins: {
-      legend: {
-        position: "bottom" as const,
-        labels: {
-          font: { size: 9, family: "Inter" },
-          usePointStyle: true,
-          pointStyle: "circle" as const,
-          boxWidth: 6,
-          padding: 8,
-        },
-      },
-      tooltip: {
-        backgroundColor: "rgba(0,0,0,0.85)",
-        titleFont: { size: 12, family: "Inter", weight: "bold" as const },
-        bodyFont: { size: 10, family: "Inter" },
-        padding: 12,
-        cornerRadius: 6,
-        filter: (ctx: { parsed: { y: number | null } }) => (ctx.parsed.y ?? 0) > 0,
-        callbacks: {
-          title: (items: { dataIndex: number }[]) => {
-            const m = slotMeta[items[0]?.dataIndex ?? 0];
-            if (!m) return "";
-            return `${m.dayFull}, ${m.dateFmt}`;
-          },
-          afterTitle: (items: { dataIndex: number }[]) => {
-            const m = slotMeta[items[0]?.dataIndex ?? 0];
-            if (!m) return "";
-            return `${String(m.hour).padStart(2, "0")}:00 WIB`;
-          },
-          label: (ctx: { dataset: { label?: string }; parsed: { y: number | null } }) => {
-            const y = ctx.parsed.y ?? 0;
-            return `  ${ctx.dataset.label}: ${y.toLocaleString("en-US")} pairs`;
-          },
-        },
-      },
-    },
-    scales: {
-      x: {
-        ticks: { font: { size: 8 }, maxRotation: 45, autoSkip: false, callback: xTickCallback },
-        grid: { display: true, color: xGridColor, lineWidth: xGridWidth },
-      },
-      y: {
-        type: "linear" as const,
-        position: "left" as const,
-        beginAtZero: true,
-        ticks: { font: { size: 9 } },
-        grid: { color: "rgba(0,0,0,0.04)" },
-      },
-    },
-  }), [slotMeta, xTickCallback]);
 
   /* ── Scrollable chart width ── */
   const chartMinWidth = Math.max(800, numDays * 50);
@@ -528,33 +446,7 @@ export default function HourlyGraph() {
         </div>
       </div>
 
-      {/* ── Chart 2: By Store (multiple lines, scrollable) ── */}
-      {storeChartData && (
-        <div className="bg-card border border-border rounded-sm p-5 flex flex-col gap-3 shadow-sm">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex flex-col gap-0.5">
-              <h3 className="text-[10px] font-bold text-foreground uppercase tracking-[0.15em]">
-                Hourly Traffic — By Store
-              </h3>
-              <p className="text-[9px] text-muted-foreground">
-                {data?.byStore?.length ?? 0} stores · click legend to toggle
-              </p>
-            </div>
-          </div>
 
-          <div className="overflow-x-auto rounded">
-            <div style={{ minWidth: `${chartMinWidth}px`, height: "320px" }}>
-              {isLoading ? (
-                <div className="h-full flex items-center justify-center">
-                  <div className="w-5 h-5 border-2 border-[#00E273] border-t-transparent rounded-full animate-spin" />
-                </div>
-              ) : (
-                <Line data={storeChartData} options={storeChartOptions} />
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Day-of-Week Summary Table ── */}
       <div className="bg-card border border-border rounded-sm overflow-hidden shadow-sm">
