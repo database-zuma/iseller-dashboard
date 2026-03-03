@@ -44,6 +44,8 @@ interface DashboardData {
     atu: number;
     asp: number;
     atv: number;
+    target: number | null;
+    achievementPct: number | null;
   }[];
   byBranch: { branch: string; revenue: number }[];
   bySeries: { series: string; pairs: number }[];

@@ -143,10 +143,15 @@ export async function GET(req: NextRequest) {
       ? `WHERE ${conds.join(" AND ")}`
       : "";
 
+    // ----- target date range -----
+    const fromDate = from || '2026-01-01';
+    const toDate = to || new Date().toISOString().substring(0, 10);
+
     const [
       kpiRes, txnRes, lastUpdateRes, tsRes, storeRes,
       branchRes, seriesRes, genderRes, tierRes,
       tipeRes, sizeRes, priceRes, rankRes,
+      targetRes,
     ] = await Promise.all([
       pool.query(
         `SELECT SUM(d.revenue) AS revenue, SUM(d.pairs) AS pairs
@@ -247,6 +252,57 @@ export async function GET(req: NextRequest) {
          LIMIT 100`,
         vals
       ),
+      // --- Target query: pro-rata target per store ---
+      pool.query(
+        `WITH date_range AS (
+          SELECT $1::date AS range_from, $2::date AS range_to
+        ),
+        months AS (
+          SELECT generate_series(
+            DATE_TRUNC('month', (SELECT range_from FROM date_range)),
+            DATE_TRUNC('month', (SELECT range_to FROM date_range)),
+            '1 month'::interval
+          )::date AS month_start
+        ),
+        month_overlap AS (
+          SELECT
+            m.month_start,
+            EXTRACT(MONTH FROM m.month_start)::int AS month_num,
+            EXTRACT(YEAR FROM m.month_start)::int AS yr,
+            (DATE_TRUNC('month', m.month_start) + INTERVAL '1 month' - INTERVAL '1 day')::date AS month_end,
+            GREATEST(m.month_start, (SELECT range_from FROM date_range)) AS overlap_start,
+            LEAST((DATE_TRUNC('month', m.month_start) + INTERVAL '1 month' - INTERVAL '1 day')::date, (SELECT range_to FROM date_range)) AS overlap_end
+          FROM months m
+        ),
+        month_fractions AS (
+          SELECT
+            mo.*,
+            (mo.overlap_end - mo.overlap_start + 1)::numeric / (mo.month_end - mo.month_start + 1)::numeric AS fraction
+          FROM month_overlap mo
+        ),
+        target_unpivot AS (
+          SELECT t.store_name_norm, t.year AS yr, m.month_num, m.target_revenue
+          FROM portal.store_monthly_target t,
+          LATERAL (VALUES
+            (1, t.jan), (2, t.feb), (3, t.mar), (4, t.apr), (5, t.may), (6, t.jun),
+            (7, t.jul), (8, t.aug), (9, t.sep), (10, t.oct), (11, t.nov), (12, t.dec)
+          ) AS m(month_num, target_revenue)
+          WHERE t.year IN (SELECT DISTINCT yr FROM month_fractions)
+        ),
+        store_target AS (
+          SELECT
+            s.nama_iseller AS toko,
+            SUM(tu.target_revenue * mf.fraction) AS target_revenue
+          FROM month_fractions mf
+          JOIN target_unpivot tu ON tu.yr = mf.yr AND tu.month_num = mf.month_num
+          JOIN portal.store s ON LOWER(s.nama_iseller) = tu.store_name_norm
+          WHERE tu.target_revenue IS NOT NULL AND tu.target_revenue > 0
+          GROUP BY s.nama_iseller
+        )
+        SELECT toko, ROUND(target_revenue)::bigint AS target_revenue
+        FROM store_target`,
+        [fromDate, toDate]
+      ),
     ]);
 
     const kpiRow = kpiRes.rows[0] ?? { revenue: 0, pairs: 0 };
@@ -270,16 +326,29 @@ export async function GET(req: NextRequest) {
       pairs: Number(r.pairs),
     }));
 
-    const stores = storeRes.rows.map((r: Record<string, unknown>) => ({
-      toko: r.toko,
-      branch: r.branch,
-      pairs: Number(r.pairs),
-      revenue: Number(r.revenue),
-      transactions: Number(r.transactions),
-      atu: Number(r.atu),
-      asp: Number(r.asp),
-      atv: Number(r.atv),
-    }));
+    // Build target lookup map from targetRes
+    const targetMap = new Map<string, number>();
+    for (const r of targetRes.rows) {
+      targetMap.set(String(r.toko), Number(r.target_revenue || 0));
+    }
+
+    const stores = storeRes.rows.map((r: Record<string, unknown>) => {
+      const rev = Number(r.revenue);
+      const target = targetMap.get(String(r.toko)) || null;
+      const achievementPct = target && target > 0 ? (rev / target) * 100 : null;
+      return {
+        toko: r.toko,
+        branch: r.branch,
+        pairs: Number(r.pairs),
+        revenue: rev,
+        transactions: Number(r.transactions),
+        atu: Number(r.atu),
+        asp: Number(r.asp),
+        atv: Number(r.atv),
+        target: target,
+        achievementPct: achievementPct !== null ? Math.round(achievementPct * 10) / 10 : null,
+      };
+    });
 
     const mapNum = (rows: Record<string, unknown>[], ...keys: string[]) =>
       rows.map((r) => {

@@ -13,6 +13,8 @@ interface StoreRow {
   atu: number;
   asp: number;
   atv: number;
+  target: number | null;
+  achievementPct: number | null;
 }
 
 function fmtRp(n: number) {
@@ -43,11 +45,12 @@ export default function StoreTable({ stores, loading }: { stores?: StoreRow[]; l
               <button
                 type="button"
                 onClick={() => {
-                  const headers = ["#", "Store", "Branch", "Qty", "Revenue", "Txn", "ATU", "ASP", "ATV"];
-                  const keys = ["rank", "toko", "branch", "pairs", "revenue", "transactions", "atu", "asp", "atv"];
+                  const headers = ["#", "Store", "Branch", "Qty", "Revenue", "Target", "Ach %", "Txn", "ATU", "ASP", "ATV"];
+                  const keys = ["rank", "toko", "branch", "pairs", "revenue", "target", "achievementPct", "transactions", "atu", "asp", "atv"];
                   const rows: Record<string, unknown>[] = (stores ?? []).map((s, idx) => ({
                     rank: idx + 1, toko: s.toko, branch: s.branch, pairs: s.pairs,
-                    revenue: s.revenue, transactions: s.transactions,
+                    revenue: s.revenue, target: s.target ?? '', achievementPct: s.achievementPct != null ? `${s.achievementPct}%` : '\u2014',
+                    transactions: s.transactions,
                     atu: Number(s.atu.toFixed(1)), asp: Math.round(s.asp), atv: Math.round(s.atv),
                   }));
                   downloadCSV(toCSV(headers, rows, keys), "store_performance.csv");
@@ -59,11 +62,12 @@ export default function StoreTable({ stores, loading }: { stores?: StoreRow[]; l
               <button
                 type="button"
                 onClick={() => {
-                  const headers = ["#", "Store", "Branch", "Qty", "Revenue", "Txn", "ATU", "ASP", "ATV"];
-                  const keys = ["rank", "toko", "branch", "pairs", "revenue", "transactions", "atu", "asp", "atv"];
+                  const headers = ["#", "Store", "Branch", "Qty", "Revenue", "Target", "Ach %", "Txn", "ATU", "ASP", "ATV"];
+                  const keys = ["rank", "toko", "branch", "pairs", "revenue", "target", "achievementPct", "transactions", "atu", "asp", "atv"];
                   const rows: Record<string, unknown>[] = (stores ?? []).map((s, idx) => ({
                     rank: idx + 1, toko: s.toko, branch: s.branch, pairs: s.pairs,
-                    revenue: s.revenue, transactions: s.transactions,
+                    revenue: s.revenue, target: s.target ?? '', achievementPct: s.achievementPct != null ? `${s.achievementPct}%` : '\u2014',
+                    transactions: s.transactions,
                     atu: Number(s.atu.toFixed(1)), asp: Math.round(s.asp), atv: Math.round(s.atv),
                   }));
                   void downloadXLSX(headers, rows, keys, "store_performance.xlsx");
@@ -90,6 +94,8 @@ export default function StoreTable({ stores, loading }: { stores?: StoreRow[]; l
               <th className={thClass}>Branch</th>
               <th className={thRight}>Qty</th>
               <th className={thRight}>Revenue</th>
+              <th className={thRight}>Target</th>
+              <th className={`text-center px-2 py-2.5 text-[9px] font-bold text-muted-foreground uppercase tracking-[0.12em]`}>Achievement</th>
               <th className={thRight}>Txn</th>
               <th className={thRight}>ATU</th>
               <th className={thRight}>ASP</th>
@@ -100,7 +106,7 @@ export default function StoreTable({ stores, loading }: { stores?: StoreRow[]; l
             {loading ? (
               Array.from({ length: 8 }, (_, i) => (
                 <tr key={`skel-${String(i)}`} className="border-b border-border/50">
-                  {Array.from({ length: 9 }, (_, j) => (
+                  {Array.from({ length: 11 }, (_, j) => (
                     <td key={`sc-${String(j)}`} className="px-3 py-2.5">
                       <div className="h-3 bg-muted animate-pulse rounded-sm w-full" />
                     </td>
@@ -117,6 +123,24 @@ export default function StoreTable({ stores, loading }: { stores?: StoreRow[]; l
                     <td className="px-3 py-2.5 text-muted-foreground text-xs">{s.branch || "—"}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-xs">{Math.round(s.pairs).toLocaleString("en-US")}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-xs">{fmtRp(s.revenue)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-xs text-muted-foreground">{s.target != null ? fmtRp(s.target) : '\u2014'}</td>
+                    <td className="px-2 py-2.5">
+                      {s.achievementPct != null ? (
+                        <div className="flex items-center gap-1.5 justify-center">
+                          <div className="w-14 h-2 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${s.achievementPct >= 100 ? 'bg-[#00E273]' : s.achievementPct >= 80 ? 'bg-amber-400' : 'bg-red-400'}`}
+                              style={{ width: `${Math.min(s.achievementPct, 100)}%` }}
+                            />
+                          </div>
+                          <span className={`text-[10px] tabular-nums font-semibold ${s.achievementPct >= 100 ? 'text-[#00E273]' : s.achievementPct >= 80 ? 'text-amber-500' : 'text-red-500'}`}>
+                            {s.achievementPct.toFixed(1)}%
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground text-center block">\u2014</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-xs text-muted-foreground">{s.transactions.toLocaleString("en-US")}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-xs text-muted-foreground">{s.atu.toFixed(1)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-xs text-muted-foreground">{fmtRp(s.asp)}</td>
@@ -126,7 +150,7 @@ export default function StoreTable({ stores, loading }: { stores?: StoreRow[]; l
               })
             ) : (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground text-xs">No data</td>
+                <td colSpan={11} className="px-4 py-8 text-center text-muted-foreground text-xs">No data</td>
               </tr>
             )}
           </tbody>
@@ -134,6 +158,9 @@ export default function StoreTable({ stores, loading }: { stores?: StoreRow[]; l
             const totQty = stores.reduce((s, r) => s + r.pairs, 0);
             const totRev = stores.reduce((s, r) => s + r.revenue, 0);
             const totTxn = stores.reduce((s, r) => s + r.transactions, 0);
+            const totTarget = stores.reduce((s, r) => s + (r.target || 0), 0);
+            const hasAnyTarget = stores.some(r => r.target != null);
+            const totAchPct = totTarget > 0 ? (totRev / totTarget) * 100 : null;
             const avgAtu = totTxn > 0 ? totQty / totTxn : 0;
             const avgAsp = totQty > 0 ? totRev / totQty : 0;
             const avgAtv = totTxn > 0 ? totRev / totTxn : 0;
@@ -143,6 +170,24 @@ export default function StoreTable({ stores, loading }: { stores?: StoreRow[]; l
                   <td className="px-2 py-2.5 text-center text-[9px] font-bold text-foreground" colSpan={3}>TOTAL</td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{Math.round(totQty).toLocaleString("en-US")}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{fmtRp(totRev)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-muted-foreground">{hasAnyTarget ? fmtRp(totTarget) : '\u2014'}</td>
+                  <td className="px-2 py-2.5">
+                    {totAchPct != null ? (
+                      <div className="flex items-center gap-1.5 justify-center">
+                        <div className="w-14 h-2 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${totAchPct >= 100 ? 'bg-[#00E273]' : totAchPct >= 80 ? 'bg-amber-400' : 'bg-red-400'}`}
+                            style={{ width: `${Math.min(totAchPct, 100)}%` }}
+                          />
+                        </div>
+                        <span className={`text-[10px] tabular-nums font-bold ${totAchPct >= 100 ? 'text-[#00E273]' : totAchPct >= 80 ? 'text-amber-500' : 'text-red-500'}`}>
+                          {totAchPct.toFixed(1)}%
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground text-center block">\u2014</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{totTxn.toLocaleString("en-US")}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-muted-foreground">{avgAtu.toFixed(1)}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-muted-foreground">{fmtRp(avgAsp)}</td>
