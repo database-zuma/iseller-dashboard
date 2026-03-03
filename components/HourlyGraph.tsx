@@ -276,6 +276,16 @@ export default function HourlyGraph() {
           title: (items: { dataIndex: number }[]) => {
             const m = slotMeta[items[0]?.dataIndex ?? 0];
             if (!m) return "";
+            if (showLastYear) {
+              const lyDate = new Date(m.date + "T00:00:00");
+              lyDate.setFullYear(lyDate.getFullYear() - 1);
+              const lyFmt = `${lyDate.getDate()} ${MONTHS[lyDate.getMonth()]} ${lyDate.getFullYear()}`;
+              const lyDay = DAY_FULL[lyDate.getDay()];
+              return [
+                `📗 ${m.dayFull}, ${m.dateFmt}`,
+                `📘 ${lyDay}, ${lyFmt}`,
+              ];
+            }
             return `${m.dayFull}, ${m.dateFmt}`;
           },
           afterTitle: (items: { dataIndex: number }[]) => {
