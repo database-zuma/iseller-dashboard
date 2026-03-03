@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import {
@@ -14,6 +14,7 @@ import {
   Tooltip,
   Legend,
   Filler,
+  type ChartDataset,
 } from "chart.js";
 import { Line } from "react-chartjs-2";
 
@@ -25,6 +26,13 @@ interface StoreData {
   store: string;
   pairs: number[];
   transactions: number[];
+}
+
+interface LastYearData {
+  pairs: number[];
+  revenue: number[];
+  transactions: number[];
+  totalPairs: number;
 }
 
 interface HourlyData {
@@ -43,6 +51,7 @@ interface HourlyData {
     peakHour: number;
     peakPairs: number;
   };
+  lastYear?: LastYearData;
 }
 
 /* ─── helpers ───────────────────────────────────────── */
@@ -90,6 +99,7 @@ const STORE_COLORS = [
 
 export default function HourlyGraph() {
   const searchParams = useSearchParams();
+  const [showLastYear, setShowLastYear] = useState(false);
 
   /* ── build API URL from shared filters ── */
   const apiUrl = useMemo(() => {
@@ -150,22 +160,41 @@ export default function HourlyGraph() {
     return `${fmtDateFull(data.dateRange.from)} — ${fmtDateFull(data.dateRange.to)}`;
   }, [data]);
 
-  /* ── Chart 1: Total (single line) ── */
-  const totalChartData = useMemo(() => ({
-    labels,
-    datasets: [{
-      label: "Pairs (Qty)",
-      data: data?.pairs ?? [],
-      borderColor: "#00E273",
-      backgroundColor: "rgba(0, 226, 115, 0.06)",
-      fill: true,
-      tension: 0.3,
-      pointRadius: 0,
-      pointHoverRadius: 5,
-      pointBackgroundColor: "#00E273",
-      borderWidth: 2,
-    }],
-  }), [labels, data?.pairs]);
+  /* ── Chart 1: Total (single line + optional last year) ── */
+  const totalChartData = useMemo(() => {
+    const datasets: ChartDataset<"line", number[]>[] = [
+      {
+        label: "Pairs (Qty)",
+        data: data?.pairs ?? [],
+        borderColor: "#00E273",
+        backgroundColor: "rgba(0, 226, 115, 0.06)",
+        fill: true,
+        tension: 0.3,
+        pointRadius: 0,
+        pointHoverRadius: 5,
+        pointBackgroundColor: "#00E273",
+        borderWidth: 2,
+      },
+    ];
+
+    if (showLastYear && data?.lastYear?.pairs?.length) {
+      datasets.push({
+        label: "Last Year",
+        data: data.lastYear.pairs,
+        borderColor: "#3B82F6",
+        backgroundColor: "transparent",
+        fill: false,
+        tension: 0.3,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        pointBackgroundColor: "#3B82F6",
+        borderWidth: 1.8,
+        borderDash: [6, 3],
+      });
+    }
+
+    return { labels, datasets };
+  }, [labels, data?.pairs, data?.lastYear, showLastYear]);
 
   /* ── Chart 2: By Store (multiple lines) ── */
   const storeChartData = useMemo(() => {
@@ -228,7 +257,14 @@ export default function HourlyGraph() {
     interaction: { mode: "index" as const, intersect: false },
     plugins: {
       legend: {
-        display: false,
+        display: showLastYear,
+        labels: {
+          font: { size: 9, family: "Inter" },
+          usePointStyle: true,
+          pointStyle: "circle" as const,
+          boxWidth: 6,
+          padding: 8,
+        },
       },
       tooltip: {
         backgroundColor: "rgba(0,0,0,0.85)",
@@ -247,11 +283,13 @@ export default function HourlyGraph() {
             if (!m) return "";
             return `${String(m.hour).padStart(2, "0")}:00 WIB`;
           },
-          label: (ctx: { parsed: { y: number | null }; dataIndex: number }) => {
+          label: (ctx: { parsed: { y: number | null }; dataset: { label?: string }; dataIndex: number }) => {
             const y = ctx.parsed.y ?? 0;
-            return `  Pairs: ${y.toLocaleString("en-US")}`;
+            const prefix = showLastYear ? `  ${ctx.dataset.label ?? ""}: ` : "  Pairs: ";
+            return `${prefix}${y.toLocaleString("en-US")}`;
           },
           afterBody: (items: { dataIndex: number }[]) => {
+            if (showLastYear) return [];
             const idx = items[0]?.dataIndex ?? 0;
             const txn = data?.transactions?.[idx] ?? 0;
             return [`  Transactions: ${txn.toLocaleString("en-US")}`];
@@ -272,7 +310,7 @@ export default function HourlyGraph() {
         grid: { color: "rgba(0,0,0,0.04)" },
       },
     },
-  }), [slotMeta, data?.transactions, xTickCallback]);
+  }), [slotMeta, data?.transactions, xTickCallback, showLastYear]);
 
   /* ── Chart 2 options (per store) ── */
   const storeChartOptions = useMemo(() => ({
@@ -449,9 +487,22 @@ export default function HourlyGraph() {
               Hover for date, day, pairs &amp; transactions
             </p>
           </div>
-          <span className="text-[9px] text-muted-foreground bg-muted px-2 py-0.5 rounded">
-            {totalSlots.toLocaleString()} data points · {numDays} days × 24h
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowLastYear((v) => !v)}
+              className={`text-[9px] font-medium px-2.5 py-1 rounded border transition-colors ${
+                showLastYear
+                  ? "bg-blue-50 border-blue-300 text-blue-700"
+                  : "bg-muted border-border text-muted-foreground hover:bg-muted/80"
+              }`}
+            >
+              {showLastYear ? "▶ Hide Last Year" : "◀ vs Last Year"}
+            </button>
+            <span className="text-[9px] text-muted-foreground bg-muted px-2 py-0.5 rounded">
+              {totalSlots.toLocaleString()} data points · {numDays} days × 24h
+            </span>
+          </div>
         </div>
 
         <div className="overflow-x-auto rounded">
