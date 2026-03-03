@@ -12,7 +12,7 @@ import { useMetisContext } from "@/providers/metis-provider";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PRIMARY_MODEL, getModelDisplayName } from "@/lib/metis/config";
 
-const DASHBOARD_ID = "accurate-sales";
+const DASHBOARD_ID = "iseller-sales";
 
 // ── User fingerprint ──────────────────────────────────
 // Simple browser fingerprint — persisted in localStorage so the same browser
