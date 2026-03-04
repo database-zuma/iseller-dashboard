@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/db";
+import { getCached, setCache } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -33,6 +34,18 @@ export async function GET(req: NextRequest) {
   const dir = sp.get("dir") === "asc" ? "ASC" : "DESC";
 
   try {
+    const cacheKey = `detail:${req.nextUrl.search}`;
+    if (!isExport) {
+      const cached = getCached(cacheKey);
+      if (cached) {
+        return NextResponse.json(cached, {
+          headers: {
+            "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+            "X-Cache": "HIT",
+          },
+        });
+      }
+    }
     const vals: unknown[] = [];
     const conds: string[] = [];
     let i = 1;
@@ -203,14 +216,23 @@ export async function GET(req: NextRequest) {
       revenue: Number(r.revenue),
       avg_price: Number(r.avg_price),
     }));
-    return NextResponse.json({
+    const responseData = {
       rows,
       total,
       page,
       pages: Math.ceil(total / limit),
       totals: { pairs: totalPairs, revenue: totalRevenue },
-    }, {
-      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
+    };
+
+    if (!isExport) {
+      setCache(cacheKey, responseData);
+    }
+
+    return NextResponse.json(responseData, {
+      headers: {
+        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+        "X-Cache": "MISS",
+      },
     });
   } catch (e) {
     console.error("detail error:", e);

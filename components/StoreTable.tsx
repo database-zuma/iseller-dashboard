@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { toCSV, downloadCSV, downloadXLSX } from "@/lib/export";
 
@@ -29,6 +29,23 @@ export default function StoreTable({ stores, loading }: { stores?: StoreRow[]; l
   const totalRows = stores?.length ?? 0;
   const totalPages = Math.ceil(totalRows / ROWS_PER_PAGE);
   const currentRows = stores?.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE) ?? [];
+
+  const totals = useMemo(() => {
+    if (!stores || stores.length === 0) {
+      return { qty: 0, revenue: 0, txn: 0, avgAtu: 0, avgAsp: 0, avgAtv: 0 };
+    }
+    const qty = stores.reduce((s, r) => s + r.pairs, 0);
+    const revenue = stores.reduce((s, r) => s + r.revenue, 0);
+    const txn = stores.reduce((s, r) => s + r.transactions, 0);
+    return {
+      qty,
+      revenue,
+      txn,
+      avgAtu: txn > 0 ? qty / txn : 0,
+      avgAsp: qty > 0 ? revenue / qty : 0,
+      avgAtv: txn > 0 ? revenue / txn : 0,
+    };
+  }, [stores]);
 
   const thClass = "text-left px-3 py-2.5 text-[9px] font-bold text-muted-foreground uppercase tracking-[0.12em]";
   const thRight = `text-right px-3 py-2.5 text-[9px] font-bold text-muted-foreground uppercase tracking-[0.12em]`;
@@ -130,27 +147,19 @@ export default function StoreTable({ stores, loading }: { stores?: StoreRow[]; l
               </tr>
             )}
           </tbody>
-          {!loading && stores && stores.length > 0 && (() => {
-            const totQty = stores.reduce((s, r) => s + r.pairs, 0);
-            const totRev = stores.reduce((s, r) => s + r.revenue, 0);
-            const totTxn = stores.reduce((s, r) => s + r.transactions, 0);
-            const avgAtu = totTxn > 0 ? totQty / totTxn : 0;
-            const avgAsp = totQty > 0 ? totRev / totQty : 0;
-            const avgAtv = totTxn > 0 ? totRev / totTxn : 0;
-            return (
-              <tfoot>
-                <tr className="border-t-2 border-[#00E273]/40 bg-muted/40">
-                  <td className="px-2 py-2.5 text-center text-[9px] font-bold text-foreground" colSpan={3}>TOTAL</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{Math.round(totQty).toLocaleString("en-US")}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{fmtRp(totRev)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{totTxn.toLocaleString("en-US")}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-muted-foreground">{avgAtu.toFixed(1)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-muted-foreground">{fmtRp(avgAsp)}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-muted-foreground">{fmtRp(avgAtv)}</td>
-                </tr>
-              </tfoot>
-            );
-          })()}
+          {!loading && stores && stores.length > 0 && (
+            <tfoot>
+              <tr className="border-t-2 border-[#00E273]/40 bg-muted/40">
+                <td className="px-2 py-2.5 text-center text-[9px] font-bold text-foreground" colSpan={3}>TOTAL</td>
+                <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{Math.round(totals.qty).toLocaleString("en-US")}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{fmtRp(totals.revenue)}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{totals.txn.toLocaleString("en-US")}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-muted-foreground">{totals.avgAtu.toFixed(1)}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-muted-foreground">{fmtRp(totals.avgAsp)}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-muted-foreground">{fmtRp(totals.avgAtv)}</td>
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
       {totalPages > 1 && (

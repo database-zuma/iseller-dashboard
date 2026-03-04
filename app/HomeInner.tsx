@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo } from "react";
-import useSWR from "swr";
+import useSWR, { preload } from "swr";
 import { fetcher } from "@/lib/fetcher";
 import FilterBar from "@/components/FilterBar";
 import KpiCards from "@/components/KpiCards";
@@ -106,6 +106,47 @@ export default function HomeInner() {
     [router, searchParams]
   );
 
+  const prefetchTab = useCallback((tabId: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (!params.has("from")) params.set("from", "2026-01-01");
+    if (!params.has("to")) params.set("to", new Date().toISOString().substring(0, 10));
+
+    let url = "";
+    switch (tabId) {
+      case "achievement":
+        url = "/api/achievement";
+        break;
+      case "detail":
+        url = `/api/detail?v=2&mode=kode&${params.toString()}`;
+        break;
+      case "detail-size":
+        url = `/api/detail?v=2&mode=kode_besar&${params.toString()}`;
+        break;
+      case "promo":
+        const promoParams = new URLSearchParams();
+        promoParams.set("from", params.get("from") || "2026-01-01");
+        promoParams.set("to", params.get("to") || "");
+        if (params.get("branch")) promoParams.set("branch", params.get("branch")!);
+        if (params.get("store")) promoParams.set("store", params.get("store")!);
+        if (params.get("campaign")) promoParams.set("campaign", params.get("campaign")!);
+        url = `/api/promo?${promoParams.toString()}`;
+        break;
+      case "hourly":
+        const hourlyParams = new URLSearchParams();
+        hourlyParams.set("from", params.get("from") || "2026-01-01");
+        hourlyParams.set("to", params.get("to") || "");
+        ["branch", "store", "series", "gender", "tier", "color", "tipe", "version"].forEach(k => {
+          if (params.get(k)) hourlyParams.set(k, params.get(k)!);
+        });
+        url = `/api/hourly?${hourlyParams.toString()}`;
+        break;
+    }
+
+    if (url) {
+      preload(url, fetcher);
+    }
+  }, [searchParams]);
+
   const apiParams = new URLSearchParams(searchParams.toString());
   if (!apiParams.has("from")) apiParams.set("from", "2026-01-01");
   if (!apiParams.has("to")) apiParams.set("to", new Date().toISOString().substring(0, 10));
@@ -178,6 +219,7 @@ export default function HomeInner() {
               key={t.id}
               type="button"
               onClick={() => setTab(t.id)}
+              onMouseEnter={() => prefetchTab(t.id)}
               className={`px-4 py-2 text-xs font-semibold transition-colors
                 ${activeTab === t.id
                   ? "text-foreground border-b-[3px] border-[#00E273] -mb-[2px] bg-card"
