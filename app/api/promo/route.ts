@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import pool from "@/lib/db";
+import { getCached, setCache } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -12,196 +13,201 @@ function parseMulti(sp: URLSearchParams, key: string): string[] {
 
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
+  
+  // OPT-05: App-level caching
+  const cacheKey = `promo:${sp.toString()}`;
+  const cached = getCached<unknown>(cacheKey);
+  if (cached) {
+    return NextResponse.json(cached, {
+      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
+    });
+  }
 
-  /* ───── grab a SINGLE connection to avoid pool exhaustion ───── */
-  const client = await pool.connect();
+  /* ───── shared filter building ───── */
+  const vals: unknown[] = [];
+  const conds: string[] = [];
+  let i = 1;
 
+  const from = sp.get("from");
+  const to = sp.get("to");
+  if (from) { conds.push(`p.sale_date >= $${i++}`); vals.push(from); }
+  if (to)   { conds.push(`p.sale_date <= $${i++}`); vals.push(to); }
+
+  const branch = parseMulti(sp, "branch");
+  if (branch.length) {
+    const phs = branch.map(() => `$${i++}`).join(", ");
+    conds.push(`p.branch IN (${phs})`);
+    vals.push(...branch);
+  }
+
+  const store = parseMulti(sp, "store");
+  if (store.length) {
+    const phs = store.map(() => `$${i++}`).join(", ");
+    conds.push(`p.toko IN (${phs})`);
+    vals.push(...store);
+  }
+
+  const campaign = parseMulti(sp, "campaign");
+  if (campaign.length) {
+    const phs = campaign.map(() => `$${i++}`).join(", ");
+    conds.push(`p.campaign_code IN (${phs})`);
+    vals.push(...campaign);
+  }
+
+  const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+
+  /* ───── Mode B: overall filters (no campaign filter) ───── */
+  const mvVals: unknown[] = [];
+  const mvConds: string[] = [];
+  let mi = 1;
+  if (from) { mvConds.push(`d.sale_date >= $${mi++}`); mvVals.push(from); }
+  if (to)   { mvConds.push(`d.sale_date <= $${mi++}`); mvVals.push(to); }
+  if (branch.length) {
+    const phs = branch.map(() => `$${mi++}`).join(", ");
+    mvConds.push(`d.branch IN (${phs})`);
+    mvVals.push(...branch);
+  }
+  if (store.length) {
+    const phs = store.map(() => `$${mi++}`).join(", ");
+    mvConds.push(`d.toko IN (${phs})`);
+    mvVals.push(...store);
+  }
+  const mvWhere = mvConds.length ? `WHERE ${mvConds.join(" AND ")}` : "";
+
+  const txnVals: unknown[] = [];
+  const txnConds: string[] = [];
+  let ti = 1;
+  if (from) { txnConds.push(`t.sale_date >= $${ti++}`); txnVals.push(from); }
+  if (to)   { txnConds.push(`t.sale_date <= $${ti++}`); txnVals.push(to); }
+  if (branch.length) {
+    const phs = branch.map(() => `$${ti++}`).join(", ");
+    txnConds.push(`t.branch IN (${phs})`);
+    txnVals.push(...branch);
+  }
+  if (store.length) {
+    const phs = store.map(() => `$${ti++}`).join(", ");
+    txnConds.push(`t.toko IN (${phs})`);
+    txnVals.push(...store);
+  }
+  const txnWhere = txnConds.length ? `WHERE ${txnConds.join(" AND ")}` : "";
+
+  const spgWhere = conds.length
+    ? `WHERE ${conds.join(" AND ")} AND p.spg != 'Unknown'`
+    : "WHERE p.spg != 'Unknown'";
+
+  /* ═══════ OPT-01: Run ALL queries in PARALLEL using Promise.all ═══════ */
+  
   try {
-    /* ───── shared filter building ───── */
-    const vals: unknown[] = [];
-    const conds: string[] = [];
-    let i = 1;
-
-    const from = sp.get("from");
-    const to = sp.get("to");
-    if (from) { conds.push(`p.sale_date >= $${i++}`); vals.push(from); }
-    if (to)   { conds.push(`p.sale_date <= $${i++}`); vals.push(to); }
-
-    const branch = parseMulti(sp, "branch");
-    if (branch.length) {
-      const phs = branch.map(() => `$${i++}`).join(", ");
-      conds.push(`p.branch IN (${phs})`);
-      vals.push(...branch);
-    }
-
-    const store = parseMulti(sp, "store");
-    if (store.length) {
-      const phs = store.map(() => `$${i++}`).join(", ");
-      conds.push(`p.toko IN (${phs})`);
-      vals.push(...store);
-    }
-
-    const campaign = parseMulti(sp, "campaign");
-    if (campaign.length) {
-      const phs = campaign.map(() => `$${i++}`).join(", ");
-      conds.push(`p.campaign_code IN (${phs})`);
-      vals.push(...campaign);
-    }
-
-    const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
-
-    /* ───── Mode B: overall filters (no campaign filter — we want ALL struks) ───── */
-    const mvVals: unknown[] = [];
-    const mvConds: string[] = [];
-    let mi = 1;
-    if (from) { mvConds.push(`d.sale_date >= $${mi++}`); mvVals.push(from); }
-    if (to)   { mvConds.push(`d.sale_date <= $${mi++}`); mvVals.push(to); }
-    if (branch.length) {
-      const phs = branch.map(() => `$${mi++}`).join(", ");
-      mvConds.push(`d.branch IN (${phs})`);
-      mvVals.push(...branch);
-    }
-    if (store.length) {
-      const phs = store.map(() => `$${mi++}`).join(", ");
-      mvConds.push(`d.toko IN (${phs})`);
-      mvVals.push(...store);
-    }
-    const mvWhere = mvConds.length ? `WHERE ${mvConds.join(" AND ")}` : "";
-
-    const txnVals: unknown[] = [];
-    const txnConds: string[] = [];
-    let ti = 1;
-    if (from) { txnConds.push(`t.sale_date >= $${ti++}`); txnVals.push(from); }
-    if (to)   { txnConds.push(`t.sale_date <= $${ti++}`); txnVals.push(to); }
-    if (branch.length) {
-      const phs = branch.map(() => `$${ti++}`).join(", ");
-      txnConds.push(`t.branch IN (${phs})`);
-      txnVals.push(...branch);
-    }
-    if (store.length) {
-      const phs = store.map(() => `$${ti++}`).join(", ");
-      txnConds.push(`t.toko IN (${phs})`);
-      txnVals.push(...store);
-    }
-    const txnWhere = txnConds.length ? `WHERE ${txnConds.join(" AND ")}` : "";
-
-    /* ───── SPG where clause ───── */
-    const spgWhere = conds.length
-      ? `WHERE ${conds.join(" AND ")} AND p.spg != 'Unknown'`
-      : "WHERE p.spg != 'Unknown'";
-
-    /* ═══════ Mode A queries (promo MV) ═══════ */
-
-    const kpiRes = await client.query(
-      `SELECT SUM(p.qty_all) AS qty_all,
-              SUM(p.qty_promo) AS qty_promo,
-              SUM(p.revenue) AS revenue,
-              SUM(p.discount_total) AS discount_total,
-              SUM(p.txn_count) AS txn_count
-       FROM mart.mv_iseller_promo p ${where}`,
-      vals
-    );
-
-    const timeSeriesRes = await client.query(
-      `SELECT p.sale_date AS period,
-              SUM(p.qty_all) AS qty_all,
-              SUM(p.qty_promo) AS qty_promo,
-              SUM(p.revenue) AS revenue,
-              SUM(p.discount_total) AS discount_total,
-              SUM(p.txn_count) AS txn_count
-       FROM mart.mv_iseller_promo p ${where}
-       GROUP BY p.sale_date ORDER BY p.sale_date`,
-      vals
-    );
-
-    const byCampaignRes = await client.query(
-      `SELECT p.campaign_code,
-              SUM(p.qty_all) AS qty_all,
-              SUM(p.qty_promo) AS qty_promo,
-              SUM(p.revenue) AS revenue,
-              SUM(p.discount_total) AS discount_total,
-              SUM(p.txn_count) AS txn_count
-       FROM mart.mv_iseller_promo p ${where}
-       GROUP BY p.campaign_code ORDER BY revenue DESC`,
-      vals
-    );
-
-    const storeRes = await client.query(
-      `SELECT p.toko, p.branch,
-              SUM(p.qty_all) AS qty_all,
-              SUM(p.qty_promo) AS qty_promo,
-              SUM(p.revenue) AS revenue,
-              SUM(p.discount_total) AS discount_total,
-              SUM(p.txn_count) AS txn_count
-       FROM mart.mv_iseller_promo p ${where}
-       GROUP BY p.toko, p.branch ORDER BY revenue DESC`,
-      vals
-    );
-
-    const spgRes = await client.query(
-      `SELECT p.spg,
-              SUM(p.qty_promo) AS qty_promo,
-              SUM(p.qty_all) AS qty_all,
-              SUM(p.revenue) AS revenue,
-              SUM(p.txn_count) AS txn_count
-       FROM mart.mv_iseller_promo p ${spgWhere}
-       GROUP BY p.spg ORDER BY qty_promo DESC
-       LIMIT 50`,
-      vals
-    );
-
-    const campaignOptionsRes = await client.query(
-      `SELECT pc.campaign_code, pc.campaign_name
-       FROM portal.promo_campaign pc
-       WHERE EXISTS (SELECT 1 FROM mart.mv_iseller_promo m WHERE m.campaign_code = pc.campaign_code)
-       ORDER BY pc.campaign_name`
-    );
-
-    /* ═══════ Mode B queries (overall from summary + txn_agg) ═══════ */
-
-    const overallPairsRes = await client.query(
-      `SELECT SUM(d.pairs) AS pairs, SUM(d.revenue) AS revenue
-       FROM mart.mv_iseller_summary d ${mvWhere}`,
-      mvVals
-    );
-
-    const overallTxnRes = await client.query(
-      `SELECT SUM(t.txn_count) AS txn_count
-       FROM mart.mv_iseller_txn_agg t ${txnWhere}`,
-      txnVals
-    );
-
-    /* Mode B time series: daily pairs + revenue */
-    const overallTsByDayRes = await client.query(
-      `SELECT d.sale_date AS period, SUM(d.pairs) AS pairs, SUM(d.revenue) AS revenue
-       FROM mart.mv_iseller_summary d ${mvWhere}
-       GROUP BY d.sale_date ORDER BY d.sale_date`,
-      mvVals
-    );
-
-    /* Mode B time series: daily txn count */
-    const overallTsTxnRes = await client.query(
-      `SELECT t.sale_date AS period, SUM(t.txn_count) AS txn_count
-       FROM mart.mv_iseller_txn_agg t ${txnWhere}
-       GROUP BY t.sale_date ORDER BY t.sale_date`,
-      txnVals
-    );
-
-    /* Mode B stores: store pairs + revenue */
-    const overallStoreRes = await client.query(
-      `SELECT d.toko, d.branch, SUM(d.pairs) AS pairs, SUM(d.revenue) AS revenue
-       FROM mart.mv_iseller_summary d ${mvWhere}
-       GROUP BY d.toko, d.branch ORDER BY revenue DESC`,
-      mvVals
-    );
-
-    /* Mode B stores: store txn count */
-    const overallStoreTxnRes = await client.query(
-      `SELECT t.toko, t.branch, SUM(t.txn_count) AS txn_count
-       FROM mart.mv_iseller_txn_agg t ${txnWhere}
-       GROUP BY t.toko, t.branch`,
-      txnVals
-    );
+    const [
+      kpiRes,
+      timeSeriesRes,
+      byCampaignRes,
+      storeRes,
+      spgRes,
+      campaignOptionsRes,
+      overallPairsRes,
+      overallTxnRes,
+      overallTsByDayRes,
+      overallTsTxnRes,
+      overallStoreRes,
+      overallStoreTxnRes,
+    ] = await Promise.all([
+      // Mode A queries (promo MV)
+      pool.query(
+        `SELECT SUM(p.qty_all) AS qty_all,
+                SUM(p.qty_promo) AS qty_promo,
+                SUM(p.revenue) AS revenue,
+                SUM(p.discount_total) AS discount_total,
+                SUM(p.txn_count) AS txn_count
+         FROM mart.mv_iseller_promo p ${where}`,
+        vals
+      ),
+      pool.query(
+        `SELECT p.sale_date AS period,
+                SUM(p.qty_all) AS qty_all,
+                SUM(p.qty_promo) AS qty_promo,
+                SUM(p.revenue) AS revenue,
+                SUM(p.discount_total) AS discount_total,
+                SUM(p.txn_count) AS txn_count
+         FROM mart.mv_iseller_promo p ${where}
+         GROUP BY p.sale_date ORDER BY p.sale_date`,
+        vals
+      ),
+      pool.query(
+        `SELECT p.campaign_code,
+                SUM(p.qty_all) AS qty_all,
+                SUM(p.qty_promo) AS qty_promo,
+                SUM(p.revenue) AS revenue,
+                SUM(p.discount_total) AS discount_total,
+                SUM(p.txn_count) AS txn_count
+         FROM mart.mv_iseller_promo p ${where}
+         GROUP BY p.campaign_code ORDER BY revenue DESC`,
+        vals
+      ),
+      pool.query(
+        `SELECT p.toko, p.branch,
+                SUM(p.qty_all) AS qty_all,
+                SUM(p.qty_promo) AS qty_promo,
+                SUM(p.revenue) AS revenue,
+                SUM(p.discount_total) AS discount_total,
+                SUM(p.txn_count) AS txn_count
+         FROM mart.mv_iseller_promo p ${where}
+         GROUP BY p.toko, p.branch ORDER BY revenue DESC`,
+        vals
+      ),
+      pool.query(
+        `SELECT p.spg,
+                SUM(p.qty_promo) AS qty_promo,
+                SUM(p.qty_all) AS qty_all,
+                SUM(p.revenue) AS revenue,
+                SUM(p.txn_count) AS txn_count
+         FROM mart.mv_iseller_promo p ${spgWhere}
+         GROUP BY p.spg ORDER BY qty_promo DESC
+         LIMIT 50`,
+        vals
+      ),
+      pool.query(
+        `SELECT pc.campaign_code, pc.campaign_name
+         FROM portal.promo_campaign pc
+         WHERE EXISTS (SELECT 1 FROM mart.mv_iseller_promo m WHERE m.campaign_code = pc.campaign_code)
+         ORDER BY pc.campaign_name`
+      ),
+      // Mode B queries (overall from summary + txn_agg)
+      pool.query(
+        `SELECT SUM(d.pairs) AS pairs, SUM(d.revenue) AS revenue
+         FROM mart.mv_iseller_summary d ${mvWhere}`,
+        mvVals
+      ),
+      pool.query(
+        `SELECT SUM(t.txn_count) AS txn_count
+         FROM mart.mv_iseller_txn_agg t ${txnWhere}`,
+        txnVals
+      ),
+      pool.query(
+        `SELECT d.sale_date AS period, SUM(d.pairs) AS pairs, SUM(d.revenue) AS revenue
+         FROM mart.mv_iseller_summary d ${mvWhere}
+         GROUP BY d.sale_date ORDER BY d.sale_date`,
+        mvVals
+      ),
+      pool.query(
+        `SELECT t.sale_date AS period, SUM(t.txn_count) AS txn_count
+         FROM mart.mv_iseller_txn_agg t ${txnWhere}
+         GROUP BY t.sale_date ORDER BY t.sale_date`,
+        txnVals
+      ),
+      pool.query(
+        `SELECT d.toko, d.branch, SUM(d.pairs) AS pairs, SUM(d.revenue) AS revenue
+         FROM mart.mv_iseller_summary d ${mvWhere}
+         GROUP BY d.toko, d.branch ORDER BY revenue DESC`,
+        mvVals
+      ),
+      pool.query(
+        `SELECT t.toko, t.branch, SUM(t.txn_count) AS txn_count
+         FROM mart.mv_iseller_txn_agg t ${txnWhere}
+         GROUP BY t.toko, t.branch`,
+        txnVals
+      ),
+    ]);
 
     /* ═══════ Build KPIs ═══════ */
 
@@ -212,7 +218,6 @@ export async function GET(req: NextRequest) {
     const discountTotal = Number(k.discount_total || 0);
     const txnCount = Number(k.txn_count || 0);
 
-    // Overall pairs for promo share denominator (no campaign filter)
     const overallPairsForShare = Number(overallPairsRes.rows[0]?.pairs || 0);
 
     const promoKpis = {
@@ -318,13 +323,14 @@ export async function GET(req: NextRequest) {
       })),
     };
 
+    // OPT-05: Cache the result
+    setCache(cacheKey, body);
+    
     return NextResponse.json(body, {
       headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
     });
   } catch (e) {
     console.error("promo error:", e);
     return NextResponse.json({ error: "DB error" }, { status: 500 });
-  } finally {
-    client.release();
   }
 }

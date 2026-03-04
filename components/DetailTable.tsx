@@ -69,6 +69,7 @@ export default function DetailTable({ mode }: { mode: Mode }) {
   const { data, isLoading } = useSWR<DetailResponse>(apiUrl, fetcher, {
     revalidateOnFocus: false,
     keepPreviousData: true,
+    dedupingInterval: 60000,
   });
 
   const push = useCallback(
