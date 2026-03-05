@@ -136,6 +136,10 @@ export async function GET(req: NextRequest) {
       storeVals.push(...fv);
     }
 
+    // Apply excludeNonSku filter to store data
+    if (sp.get("excludeNonSku") === "1") {
+      storeD.push(`(d.produk IS NULL OR (d.produk NOT ILIKE '%shopbag%' AND d.produk NOT ILIKE '%paperbag%' AND d.produk NOT ILIKE '%paper bag%' AND d.produk NOT ILIKE '%shopping bag%' AND d.produk NOT ILIKE '%inbox%' AND d.produk NOT ILIKE '%box%' AND d.produk NOT ILIKE '%gwp%' AND d.produk NOT ILIKE '%gift%' AND d.produk NOT ILIKE '%voucher%' AND d.produk NOT ILIKE '%membership%' AND d.produk NOT ILIKE '%hanger%'))`);
+    }
     const storeDWhere = storeD.length ? `WHERE ${storeD.join(" AND ")}` : "";
     const storeTWhere = storeT.length ? `WHERE ${storeT.join(" AND ")}` : "";
 
