@@ -42,6 +42,16 @@ function buildWhereClause(
     vals.push(...fv);
   }
 
+  // area filter via portal.store subquery
+  if (skipParam !== "area") {
+    const areaFv = parseMulti(sp, "area");
+    if (areaFv.length) {
+      const phs = areaFv.map(() => `$${i++}`).join(", ");
+      conds.push(`d.toko IN (SELECT nama_iseller FROM portal.store WHERE area IN (${phs}))`);
+      vals.push(...areaFv);
+    }
+  }
+
   // excludeNonSku filter
   if (sp.get("excludeNonSku") === "1") {
     conds.push(`(d.produk IS NULL OR (d.produk NOT ILIKE '%shopbag%' AND d.produk NOT ILIKE '%paperbag%' AND d.produk NOT ILIKE '%paper bag%' AND d.produk NOT ILIKE '%shopping bag%' AND d.produk NOT ILIKE '%inbox%' AND d.produk NOT ILIKE '%box%' AND d.produk NOT ILIKE '%gwp%' AND d.produk NOT ILIKE '%gift%' AND d.produk NOT ILIKE '%voucher%' AND d.produk NOT ILIKE '%membership%' AND d.produk NOT ILIKE '%hanger%'))`);
@@ -78,8 +88,12 @@ export async function GET(req: NextRequest) {
       })
     );
 
+    // Fetch areas separately from portal.store
+    const areaRes = await pool.query(`SELECT DISTINCT area AS val FROM portal.store WHERE area IS NOT NULL AND area != '' ORDER BY area`);
+
     const body: Record<string, unknown[]> = {};
     for (const r of results) body[r.key] = r.values;
+    body.areas = areaRes.rows.map((r: Record<string, unknown>) => r.val).filter((v) => v !== null && v !== '');
 
     return NextResponse.json(body, {
       headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=3600" },

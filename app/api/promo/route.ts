@@ -47,6 +47,13 @@ export async function GET(req: NextRequest) {
     vals.push(...store);
   }
 
+  const area = parseMulti(sp, "area");
+  if (area.length) {
+    const phs = area.map(() => `$${i++}`).join(", ");
+    conds.push(`p.toko IN (SELECT nama_iseller FROM portal.store WHERE area IN (${phs}))`);
+    vals.push(...area);
+  }
+
   const campaign = parseMulti(sp, "campaign");
   if (campaign.length) {
     const phs = campaign.map(() => `$${i++}`).join(", ");
@@ -72,6 +79,11 @@ export async function GET(req: NextRequest) {
     mvConds.push(`d.toko IN (${phs})`);
     mvVals.push(...store);
   }
+  if (area.length) {
+    const phs = area.map(() => `$${mi++}`).join(", ");
+    mvConds.push(`d.toko IN (SELECT nama_iseller FROM portal.store WHERE area IN (${phs}))`);
+    mvVals.push(...area);
+  }
   const mvWhere = mvConds.length ? `WHERE ${mvConds.join(" AND ")}` : "";
 
   const txnVals: unknown[] = [];
@@ -88,6 +100,11 @@ export async function GET(req: NextRequest) {
     const phs = store.map(() => `$${ti++}`).join(", ");
     txnConds.push(`t.toko IN (${phs})`);
     txnVals.push(...store);
+  }
+  if (area.length) {
+    const phs = area.map(() => `$${ti++}`).join(", ");
+    txnConds.push(`t.toko IN (SELECT nama_iseller FROM portal.store WHERE area IN (${phs}))`);
+    txnVals.push(...area);
   }
   const txnWhere = txnConds.length ? `WHERE ${txnConds.join(" AND ")}` : "";
 
@@ -145,14 +162,16 @@ export async function GET(req: NextRequest) {
         vals
       ),
       pool.query(
-        `SELECT p.toko, p.branch,
+        `SELECT p.toko, p.branch, COALESCE(_s.area, 'Unknown') AS area,
                 SUM(p.qty_all) AS qty_all,
                 SUM(p.qty_promo) AS qty_promo,
                 SUM(p.revenue) AS revenue,
                 SUM(p.discount_total) AS discount_total,
                 SUM(p.txn_count) AS txn_count
-         FROM mart.mv_iseller_promo p ${where}
-         GROUP BY p.toko, p.branch ORDER BY revenue DESC`,
+         FROM mart.mv_iseller_promo p
+         LEFT JOIN portal.store _s ON p.toko = _s.nama_iseller
+         ${where}
+         GROUP BY p.toko, p.branch, _s.area ORDER BY revenue DESC`,
         vals
       ),
       pool.query(
@@ -196,9 +215,11 @@ export async function GET(req: NextRequest) {
         txnVals
       ),
       pool.query(
-        `SELECT d.toko, d.branch, SUM(d.pairs) AS pairs, SUM(d.revenue) AS revenue
-         FROM mart.mv_iseller_summary d ${mvWhere}
-         GROUP BY d.toko, d.branch ORDER BY revenue DESC`,
+        `SELECT d.toko, d.branch, COALESCE(_s.area, 'Unknown') AS area, SUM(d.pairs) AS pairs, SUM(d.revenue) AS revenue
+         FROM mart.mv_iseller_summary d
+         LEFT JOIN portal.store _s ON d.toko = _s.nama_iseller
+         ${mvWhere}
+         GROUP BY d.toko, d.branch, _s.area ORDER BY revenue DESC`,
         mvVals
       ),
       pool.query(
@@ -274,6 +295,7 @@ export async function GET(req: NextRequest) {
     const overallStores = overallStoreRes.rows.map((r: Record<string, unknown>) => ({
       toko: r.toko,
       branch: r.branch,
+      area: r.area || 'Unknown',
       pairs: Number(r.pairs),
       revenue: Number(r.revenue),
       txnCount: txnByStore.get(String(r.toko)) ?? 0,
@@ -303,6 +325,7 @@ export async function GET(req: NextRequest) {
       stores: storeRes.rows.map((r: Record<string, unknown>) => ({
         toko: r.toko,
         branch: r.branch,
+        area: r.area || 'Unknown',
         qtyAll: Number(r.qty_all),
         qtyPromo: Number(r.qty_promo),
         revenue: Number(r.revenue),

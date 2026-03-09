@@ -78,6 +78,17 @@ export async function GET(req: NextRequest) {
       valsLastYear.push(...fv);
     }
 
+    const areaFv = parseMulti(sp, "area");
+    if (areaFv.length) {
+      const phs = areaFv.map(() => `$${i++}`).join(", ");
+      conds.push(`h.toko IN (SELECT nama_iseller FROM portal.store WHERE area IN (${phs}))`);
+      vals.push(...areaFv);
+
+      const phsLy = areaFv.map(() => `$${iLy++}`).join(", ");
+      condsLastYear.push(`h.toko IN (SELECT nama_iseller FROM portal.store WHERE area IN (${phsLy}))`);
+      valsLastYear.push(...areaFv);
+    }
+
     const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
     const whereLastYear = condsLastYear.length ? `WHERE ${condsLastYear.join(" AND ")}` : "";
 

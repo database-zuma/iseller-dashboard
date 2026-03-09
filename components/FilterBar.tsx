@@ -10,6 +10,7 @@ import { fetcher } from "@/lib/fetcher";
 interface FilterOptions {
   branches: string[];
   stores: string[];
+  areas: string[];
   genders: string[];
   series: string[];
   colors: string[];
@@ -18,7 +19,7 @@ interface FilterOptions {
   versions: string[];
 }
 
-const FILTER_KEYS = ["from", "to", "branch", "store", "gender", "series", "color", "tier", "tipe", "version", "q", "excludeNonSku"] as const;
+const FILTER_KEYS = ["from", "to", "branch", "store", "area", "gender", "series", "color", "tier", "tipe", "version", "q", "excludeNonSku"] as const;
 
 function MultiSelect({
   label,
@@ -297,6 +298,9 @@ export default function FilterBar() {
         <div className="flex-1 min-w-[90px]">
           <MultiSelect label="STORE" paramKey="store" options={opts?.stores || []} />
         </div>
+<div className="flex-1 min-w-[90px]">
+  <MultiSelect label="AREA" paramKey="area" options={opts?.areas || []} />
+</div>
         <div className="flex-1 min-w-[80px]">
           <MultiSelect label="GENDER" paramKey="gender" options={opts?.genders || []} />
         </div>

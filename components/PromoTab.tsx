@@ -70,6 +70,7 @@ interface CampaignRow {
 interface StoreRow {
   toko: string;
   branch: string;
+  area: string;
   qtyAll: number;
   qtyPromo: number;
   revenue: number;
@@ -80,6 +81,7 @@ interface StoreRow {
 interface OverallStoreRow {
   toko: string;
   branch: string;
+  area: string;
   pairs: number;
   revenue: number;
   txnCount: number;
@@ -127,7 +129,7 @@ function fmt(n: number, type: "currency" | "int" | "decimal" | "pct"): string {
 
 const ROWS_PER_PAGE = 10;
 
-type SortKey = "toko" | "branch" | "qtyAll" | "qtyPromo" | "revenue" | "discountTotal" | "txnCount" | "pairs";
+type SortKey = "toko" | "branch" | "area" | "qtyAll" | "qtyPromo" | "revenue" | "discountTotal" | "txnCount" | "pairs";
 
 /* ─── component ─────────────────────────────────────── */
 
@@ -342,17 +344,17 @@ export default function PromoTab() {
   const handleStoreCSV = useCallback(() => {
     if (sortedStores.length === 0) return;
     if (mode === "all") {
-      const headers = ["#", "Store", "Branch", "Pairs", "Revenue", "TXN"];
-      const keys = ["rank", "toko", "branch", "pairs", "revenue", "txnCount"];
+      const headers = ["#", "Store", "Branch", "Area", "Pairs", "Revenue", "TXN"];
+      const keys = ["rank", "toko", "branch", "area", "pairs", "revenue", "txnCount"];
       const rows: Record<string, unknown>[] = (sortedStores as OverallStoreRow[]).map((s, idx) => ({
-        rank: idx + 1, toko: s.toko, branch: s.branch, pairs: s.pairs, revenue: s.revenue, txnCount: s.txnCount,
+        rank: idx + 1, toko: s.toko, branch: s.branch, area: s.area || 'Unknown', pairs: s.pairs, revenue: s.revenue, txnCount: s.txnCount,
       }));
       downloadCSV(toCSV(headers, rows, keys), "overall_store_performance.csv");
     } else {
-      const headers = ["#", "Store", "Branch", "QTY All", "QTY Promo", "Revenue", "Discount", "TXN"];
-      const keys = ["rank", "toko", "branch", "qtyAll", "qtyPromo", "revenue", "discountTotal", "txnCount"];
+      const headers = ["#", "Store", "Branch", "Area", "QTY All", "QTY Promo", "Revenue", "Discount", "TXN"];
+      const keys = ["rank", "toko", "branch", "area", "qtyAll", "qtyPromo", "revenue", "discountTotal", "txnCount"];
       const rows: Record<string, unknown>[] = (sortedStores as StoreRow[]).map((s, idx) => ({
-        rank: idx + 1, toko: s.toko, branch: s.branch, qtyAll: s.qtyAll, qtyPromo: s.qtyPromo, revenue: s.revenue, discountTotal: s.discountTotal, txnCount: s.txnCount,
+        rank: idx + 1, toko: s.toko, branch: s.branch, area: s.area || 'Unknown', qtyAll: s.qtyAll, qtyPromo: s.qtyPromo, revenue: s.revenue, discountTotal: s.discountTotal, txnCount: s.txnCount,
       }));
       downloadCSV(toCSV(headers, rows, keys), "promo_store_performance.csv");
     }
@@ -361,17 +363,17 @@ export default function PromoTab() {
   const handleStoreXLSX = useCallback(() => {
     if (sortedStores.length === 0) return;
     if (mode === "all") {
-      const headers = ["#", "Store", "Branch", "Pairs", "Revenue", "TXN"];
-      const keys = ["rank", "toko", "branch", "pairs", "revenue", "txnCount"];
+      const headers = ["#", "Store", "Branch", "Area", "Pairs", "Revenue", "TXN"];
+      const keys = ["rank", "toko", "branch", "area", "pairs", "revenue", "txnCount"];
       const rows: Record<string, unknown>[] = (sortedStores as OverallStoreRow[]).map((s, idx) => ({
-        rank: idx + 1, toko: s.toko, branch: s.branch, pairs: s.pairs, revenue: s.revenue, txnCount: s.txnCount,
+        rank: idx + 1, toko: s.toko, branch: s.branch, area: s.area || 'Unknown', pairs: s.pairs, revenue: s.revenue, txnCount: s.txnCount,
       }));
       void downloadXLSX(headers, rows, keys, "overall_store_performance.xlsx");
     } else {
-      const headers = ["#", "Store", "Branch", "QTY All", "QTY Promo", "Revenue", "Discount", "TXN"];
-      const keys = ["rank", "toko", "branch", "qtyAll", "qtyPromo", "revenue", "discountTotal", "txnCount"];
+      const headers = ["#", "Store", "Branch", "Area", "QTY All", "QTY Promo", "Revenue", "Discount", "TXN"];
+      const keys = ["rank", "toko", "branch", "area", "qtyAll", "qtyPromo", "revenue", "discountTotal", "txnCount"];
       const rows: Record<string, unknown>[] = (sortedStores as StoreRow[]).map((s, idx) => ({
-        rank: idx + 1, toko: s.toko, branch: s.branch, qtyAll: s.qtyAll, qtyPromo: s.qtyPromo, revenue: s.revenue, discountTotal: s.discountTotal, txnCount: s.txnCount,
+        rank: idx + 1, toko: s.toko, branch: s.branch, area: s.area || 'Unknown', qtyAll: s.qtyAll, qtyPromo: s.qtyPromo, revenue: s.revenue, discountTotal: s.discountTotal, txnCount: s.txnCount,
       }));
       void downloadXLSX(headers, rows, keys, "promo_store_performance.xlsx");
     }
@@ -762,6 +764,7 @@ export default function PromoTab() {
                 <th className="text-center px-2 py-2.5 text-[9px] font-bold text-muted-foreground uppercase tracking-[0.12em] w-8">#</th>
                 <th className={thSort} onClick={() => handleSort("toko")}>Store{sortIndicator("toko")}</th>
                 <th className={thSort} onClick={() => handleSort("branch")}>Branch{sortIndicator("branch")}</th>
+                <th className={thSort} onClick={() => handleSort("area")}>Area{sortIndicator("area")}</th>
                 {mode === "promo" ? (
                   <>
                     <th className={thSortRight} onClick={() => handleSort("qtyAll")}>QTY All{sortIndicator("qtyAll")}</th>
@@ -783,7 +786,7 @@ export default function PromoTab() {
               {isLoading ? (
                 Array.from({ length: 8 }, (_, i) => (
                   <tr key={`sskel-${String(i)}`} className="border-b border-border/50">
-                    {Array.from({ length: mode === "promo" ? 8 : 6 }, (_, j) => (
+                    {Array.from({ length: mode === "promo" ? 9 : 7 }, (_, j) => (
                       <td key={`sc-${String(j)}`} className="px-3 py-2.5">
                         <div className="h-3 bg-muted animate-pulse rounded-sm w-full" />
                       </td>
@@ -799,6 +802,7 @@ export default function PromoTab() {
                       <td className="px-2 py-2.5 text-center tabular-nums text-xs text-muted-foreground font-medium">{rank}</td>
                       <td className="px-3 py-2.5 font-medium text-foreground max-w-[180px] truncate text-xs">{row.toko}</td>
                       <td className="px-3 py-2.5 text-muted-foreground text-xs">{row.branch || "—"}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground text-xs">{row.area || "—"}</td>
                       {mode === "promo" ? (
                         <>
                           <td className="px-3 py-2.5 text-right tabular-nums text-xs">{Math.round(row.qtyAll).toLocaleString("en-US")}</td>
@@ -819,7 +823,7 @@ export default function PromoTab() {
                 })
               ) : (
                 <tr>
-                  <td colSpan={mode === "promo" ? 8 : 6} className="px-4 py-8 text-center text-muted-foreground text-xs">No data</td>
+                  <td colSpan={mode === "promo" ? 9 : 7} className="px-4 py-8 text-center text-muted-foreground text-xs">No data</td>
                 </tr>
               )}
             </tbody>
@@ -834,7 +838,7 @@ export default function PromoTab() {
                 return (
                   <tfoot>
                     <tr className="border-t-2 border-[#00E273]/40 bg-muted/40">
-                      <td className="px-2 py-2.5 text-center text-[9px] font-bold text-foreground" colSpan={3}>TOTAL</td>
+                      <td className="px-2 py-2.5 text-center text-[9px] font-bold text-foreground" colSpan={4}>TOTAL</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{Math.round(totAll).toLocaleString("en-US")}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{Math.round(totPromo).toLocaleString("en-US")}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{fmt(totRev, "currency")}</td>
@@ -851,7 +855,7 @@ export default function PromoTab() {
                 return (
                   <tfoot>
                     <tr className="border-t-2 border-[#00E273]/40 bg-muted/40">
-                      <td className="px-2 py-2.5 text-center text-[9px] font-bold text-foreground" colSpan={3}>TOTAL</td>
+                      <td className="px-2 py-2.5 text-center text-[9px] font-bold text-foreground" colSpan={4}>TOTAL</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{Math.round(totPairs).toLocaleString("en-US")}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{fmt(totRev, "currency")}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{totTxn.toLocaleString("en-US")}</td>

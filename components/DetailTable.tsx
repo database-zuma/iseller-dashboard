@@ -12,6 +12,7 @@ type Mode = "kode" | "kode_besar";
 
 interface DetailRow {
   toko: string;
+  area?: string;
   kode?: string;
   kode_besar?: string;
   article: string;
@@ -33,10 +34,10 @@ interface DetailResponse {
   totals?: { pairs: number; revenue: number };
 }
 
-const KODE_HEADERS = ["Store", "Kode", "Article", "Gender", "Series", "Color", "Tipe", "Tier", "Qty", "Revenue", "ASP"];
-const KODE_KEYS = ["toko", "kode", "article", "gender", "series", "color", "tipe", "tier", "pairs", "revenue", "avg_price"];
-const KB_HEADERS = ["Store", "Kode Besar", "Article", "Gender", "Series", "Color", "Tipe", "Tier", "Qty", "Revenue", "ASP"];
-const KB_KEYS = ["toko", "kode_besar", "article", "gender", "series", "color", "tipe", "tier", "pairs", "revenue", "avg_price"];
+const KODE_HEADERS = ["Store", "Area", "Kode", "Article", "Gender", "Series", "Color", "Tipe", "Tier", "Qty", "Revenue", "ASP"];
+const KODE_KEYS = ["toko", "area", "kode", "article", "gender", "series", "color", "tipe", "tier", "pairs", "revenue", "avg_price"];
+const KB_HEADERS = ["Store", "Area", "Kode Besar", "Article", "Gender", "Series", "Color", "Tipe", "Tier", "Qty", "Revenue", "ASP"];
+const KB_KEYS = ["toko", "area", "kode_besar", "article", "gender", "series", "color", "tipe", "tier", "pairs", "revenue", "avg_price"];
 
 function fmtRp(n: number) {
   return "Rp " + Math.round(n).toLocaleString("en-US");
@@ -197,6 +198,7 @@ export default function DetailTable({ mode }: { mode: Mode }) {
             <thead>
               <tr className="border-b border-border bg-muted/30">
                 <Th col="toko" label="Store" />
+                <Th col="area" label="Area" />
                 {mode === "kode" ? (
                   <Th col="kode" label="Kode" />
                 ) : (
@@ -217,7 +219,7 @@ export default function DetailTable({ mode }: { mode: Mode }) {
               {isLoading ? (
                 Array.from({ length: 10 }, (_, idx) => (
                   <tr key={`skel-${String(idx)}`} className="border-b border-border/50">
-                    {Array.from({ length: 11 }, (_, cj) => (
+                    {Array.from({ length: 12 }, (_, cj) => (
                       <td key={`sc-${String(cj)}`} className="px-3 py-2.5">
                         <div className="h-3 bg-muted animate-pulse rounded-sm w-full" />
                       </td>
@@ -228,6 +230,7 @@ export default function DetailTable({ mode }: { mode: Mode }) {
                 data?.rows?.map((r, idx) => (
                   <tr key={`${r.toko}-${mode === "kode" ? r.kode : r.kode_besar}-${String(idx)}`} className="border-b border-border/40 hover:bg-muted/20 transition-colors">
                     <td className="px-3 py-2.5 font-medium max-w-[150px] truncate" title={r.toko}>{r.toko || "—"}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground max-w-[100px] truncate" title={r.area}>{r.area || "—"}</td>
                     <td className="px-3 py-2.5 font-mono text-[10px] font-medium max-w-[100px] truncate" title={mode === "kode" ? r.kode : r.kode_besar}>
                       {mode === "kode" ? r.kode || "—" : r.kode_besar || "—"}
                     </td>
@@ -245,7 +248,7 @@ export default function DetailTable({ mode }: { mode: Mode }) {
               )}
               {!isLoading && !data?.rows?.length && (
                 <tr>
-                  <td colSpan={11} className="px-3 py-8 text-center text-muted-foreground">No data</td>
+                  <td colSpan={12} className="px-3 py-8 text-center text-muted-foreground">No data</td>
                 </tr>
               )}
             </tbody>
@@ -254,7 +257,7 @@ export default function DetailTable({ mode }: { mode: Mode }) {
               return (
                 <tfoot>
                   <tr className="border-t-2 border-[#00E273]/40 bg-muted/40">
-                    <td className="px-3 py-2.5 text-[9px] font-bold text-foreground" colSpan={8}>TOTAL</td>
+                    <td className="px-3 py-2.5 text-[9px] font-bold text-foreground" colSpan={9}>TOTAL</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{data.totals.pairs.toLocaleString("en-US")}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{fmtRp(data.totals.revenue)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-muted-foreground">{fmtRp(avgAsp)}</td>

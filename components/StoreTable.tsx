@@ -7,6 +7,7 @@ import { toCSV, downloadCSV, downloadXLSX } from "@/lib/export";
 interface StoreRow {
   toko: string;
   branch: string;
+  area: string;
   pairs: number;
   revenue: number;
   transactions: number;
@@ -60,10 +61,10 @@ export default function StoreTable({ stores, loading }: { stores?: StoreRow[]; l
               <button
                 type="button"
                 onClick={() => {
-                  const headers = ["#", "Store", "Branch", "Qty", "Revenue", "Txn", "ATU", "ASP", "ATV"];
-                  const keys = ["rank", "toko", "branch", "pairs", "revenue", "transactions", "atu", "asp", "atv"];
+                  const headers = ["#", "Store", "Branch", "Area", "Qty", "Revenue", "Txn", "ATU", "ASP", "ATV"];
+                  const keys = ["rank", "toko", "branch", "area", "pairs", "revenue", "transactions", "atu", "asp", "atv"];
                   const rows: Record<string, unknown>[] = (stores ?? []).map((s, idx) => ({
-                    rank: idx + 1, toko: s.toko, branch: s.branch, pairs: s.pairs,
+                    rank: idx + 1, toko: s.toko, branch: s.branch, area: s.area || 'Unknown', pairs: s.pairs,
                     revenue: s.revenue, transactions: s.transactions,
                     atu: Number(s.atu.toFixed(1)), asp: Math.round(s.asp), atv: Math.round(s.atv),
                   }));
@@ -76,10 +77,10 @@ export default function StoreTable({ stores, loading }: { stores?: StoreRow[]; l
               <button
                 type="button"
                 onClick={() => {
-                  const headers = ["#", "Store", "Branch", "Qty", "Revenue", "Txn", "ATU", "ASP", "ATV"];
-                  const keys = ["rank", "toko", "branch", "pairs", "revenue", "transactions", "atu", "asp", "atv"];
+                  const headers = ["#", "Store", "Branch", "Area", "Qty", "Revenue", "Txn", "ATU", "ASP", "ATV"];
+                  const keys = ["rank", "toko", "branch", "area", "pairs", "revenue", "transactions", "atu", "asp", "atv"];
                   const rows: Record<string, unknown>[] = (stores ?? []).map((s, idx) => ({
-                    rank: idx + 1, toko: s.toko, branch: s.branch, pairs: s.pairs,
+                    rank: idx + 1, toko: s.toko, branch: s.branch, area: s.area || 'Unknown', pairs: s.pairs,
                     revenue: s.revenue, transactions: s.transactions,
                     atu: Number(s.atu.toFixed(1)), asp: Math.round(s.asp), atv: Math.round(s.atv),
                   }));
@@ -105,6 +106,7 @@ export default function StoreTable({ stores, loading }: { stores?: StoreRow[]; l
               <th className={`text-center px-2 py-2.5 text-[9px] font-bold text-muted-foreground uppercase tracking-[0.12em] w-8`}>#</th>
               <th className={thClass}>Store</th>
               <th className={thClass}>Branch</th>
+              <th className={thClass}>Area</th>
               <th className={thRight}>Qty</th>
               <th className={thRight}>Revenue</th>
               <th className={thRight}>Txn</th>
@@ -117,7 +119,7 @@ export default function StoreTable({ stores, loading }: { stores?: StoreRow[]; l
             {loading ? (
               Array.from({ length: 8 }, (_, i) => (
                 <tr key={`skel-${String(i)}`} className="border-b border-border/50">
-                  {Array.from({ length: 9 }, (_, j) => (
+                  {Array.from({ length: 10 }, (_, j) => (
                     <td key={`sc-${String(j)}`} className="px-3 py-2.5">
                       <div className="h-3 bg-muted animate-pulse rounded-sm w-full" />
                     </td>
@@ -132,6 +134,7 @@ export default function StoreTable({ stores, loading }: { stores?: StoreRow[]; l
                     <td className="px-2 py-2.5 text-center tabular-nums text-xs text-muted-foreground font-medium">{rank}</td>
                     <td className="px-3 py-2.5 font-medium text-foreground max-w-[180px] truncate text-xs">{s.toko}</td>
                     <td className="px-3 py-2.5 text-muted-foreground text-xs">{s.branch || "—"}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground text-xs">{s.area || "—"}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-xs">{Math.round(s.pairs).toLocaleString("en-US")}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-xs">{fmtRp(s.revenue)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-xs text-muted-foreground">{s.transactions.toLocaleString("en-US")}</td>
@@ -143,14 +146,14 @@ export default function StoreTable({ stores, loading }: { stores?: StoreRow[]; l
               })
             ) : (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground text-xs">No data</td>
+                <td colSpan={10} className="px-4 py-8 text-center text-muted-foreground text-xs">No data</td>
               </tr>
             )}
           </tbody>
           {!loading && stores && stores.length > 0 && (
             <tfoot>
               <tr className="border-t-2 border-[#00E273]/40 bg-muted/40">
-                <td className="px-2 py-2.5 text-center text-[9px] font-bold text-foreground" colSpan={3}>TOTAL</td>
+                <td className="px-2 py-2.5 text-center text-[9px] font-bold text-foreground" colSpan={4}>TOTAL</td>
                 <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{Math.round(totals.qty).toLocaleString("en-US")}</td>
                 <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{fmtRp(totals.revenue)}</td>
                 <td className="px-3 py-2.5 text-right tabular-nums text-xs font-bold text-foreground">{totals.txn.toLocaleString("en-US")}</td>

@@ -43,6 +43,13 @@ function buildMvFilters(
     vals.push(...fv);
   }
 
+  const area = parseMulti(sp, "area");
+  if (area.length) {
+    const phs = area.map(() => `$${i++}`).join(", ");
+    conds.push(`${p}toko IN (SELECT nama_iseller FROM portal.store WHERE area IN (${phs}))`);
+    vals.push(...area);
+  }
+
   if (sp.get("excludeNonSku") === "1") {
     conds.push(`(${p}produk IS NULL OR (${p}produk NOT ILIKE '%shopbag%' AND ${p}produk NOT ILIKE '%paperbag%' AND ${p}produk NOT ILIKE '%paper bag%' AND ${p}produk NOT ILIKE '%shopping bag%' AND ${p}produk NOT ILIKE '%inbox%' AND ${p}produk NOT ILIKE '%box%' AND ${p}produk NOT ILIKE '%gwp%' AND ${p}produk NOT ILIKE '%gift%' AND ${p}produk NOT ILIKE '%voucher%' AND ${p}produk NOT ILIKE '%membership%' AND ${p}produk NOT ILIKE '%hanger%'))`);
   }
@@ -77,6 +84,13 @@ function buildTxnFilters(
     const phs = store.map(() => `$${i++}`).join(", ");
     conds.push(`${p}toko IN (${phs})`);
     vals.push(...store);
+  }
+
+  const area = parseMulti(sp, "area");
+  if (area.length) {
+    const phs = area.map(() => `$${i++}`).join(", ");
+    conds.push(`${p}toko IN (SELECT nama_iseller FROM portal.store WHERE area IN (${phs}))`);
+    vals.push(...area);
   }
 
   return { conds, nextIdx: i };
@@ -126,6 +140,14 @@ export async function GET(req: NextRequest) {
       const phs = store.map(() => `$${si++}`).join(", ");
       storeD.push(`d.toko IN (${phs})`); storeT.push(`t.toko IN (${phs})`);
       storeVals.push(...store);
+    }
+
+    const area = parseMulti(sp, "area");
+    if (area.length) {
+      const phs = area.map(() => `$${si++}`).join(", ");
+      storeD.push(`d.toko IN (SELECT nama_iseller FROM portal.store WHERE area IN (${phs}))`);
+      storeT.push(`t.toko IN (SELECT nama_iseller FROM portal.store WHERE area IN (${phs}))`);
+      storeVals.push(...area);
     }
 
     for (const [param, col] of [["series","series"],["gender","gender"],["tier","tier"],["color","color"],["tipe","tipe"]] as [string,string][]) {
@@ -179,12 +201,13 @@ export async function GET(req: NextRequest) {
           FROM mart.mv_iseller_txn_agg t ${storeTWhere}
           GROUP BY t.toko
         )
-        SELECT a.toko, a.branch, a.pairs, a.revenue,
+        SELECT a.toko, a.branch, COALESCE(_s.area, 'Unknown') AS area, a.pairs, a.revenue,
                COALESCE(x.transactions, 0) AS transactions,
                CASE WHEN COALESCE(x.transactions,0) > 0 THEN a.pairs / x.transactions ELSE 0 END AS atu,
                CASE WHEN a.pairs > 0 THEN a.revenue / a.pairs ELSE 0 END AS asp,
                CASE WHEN COALESCE(x.transactions,0) > 0 THEN a.revenue / x.transactions ELSE 0 END AS atv
         FROM daily_agg a LEFT JOIN txn_agg x ON a.toko = x.toko
+        LEFT JOIN portal.store _s ON a.toko = _s.nama_iseller
         ORDER BY a.revenue DESC`,
         storeVals
       ),
@@ -277,6 +300,7 @@ export async function GET(req: NextRequest) {
     const stores = storeRes.rows.map((r: Record<string, unknown>) => ({
       toko: r.toko,
       branch: r.branch,
+      area: r.area || 'Unknown',
       pairs: Number(r.pairs),
       revenue: Number(r.revenue),
       transactions: Number(r.transactions),

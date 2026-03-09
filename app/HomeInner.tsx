@@ -40,6 +40,7 @@ interface DashboardData {
   stores: {
     toko: string;
     branch: string;
+    area: string;
     pairs: number;
     revenue: number;
     transactions: number;
@@ -128,6 +129,7 @@ export default function HomeInner() {
         promoParams.set("to", params.get("to") || "");
         if (params.get("branch")) promoParams.set("branch", params.get("branch")!);
         if (params.get("store")) promoParams.set("store", params.get("store")!);
+        if (params.get("area")) promoParams.set("area", params.get("area")!);
         if (params.get("campaign")) promoParams.set("campaign", params.get("campaign")!);
         url = `/api/promo?${promoParams.toString()}`;
         break;
@@ -135,7 +137,7 @@ export default function HomeInner() {
         const hourlyParams = new URLSearchParams();
         hourlyParams.set("from", params.get("from") || "2026-01-01");
         hourlyParams.set("to", params.get("to") || "");
-        ["branch", "store", "series", "gender", "tier", "color", "tipe", "version"].forEach(k => {
+        ["branch", "store", "area", "series", "gender", "tier", "color", "tipe", "version"].forEach(k => {
           if (params.get(k)) hourlyParams.set(k, params.get(k)!);
         });
         url = `/api/hourly?${hourlyParams.toString()}`;

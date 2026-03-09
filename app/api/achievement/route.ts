@@ -36,13 +36,15 @@ export async function GET() {
         SELECT
           d.toko,
           COALESCE(NULLIF(d.branch, ''), 'Event') AS branch,
+          COALESCE(_s.area, 'Unknown') AS area,
           EXTRACT(YEAR FROM d.sale_date)::int AS yr,
           EXTRACT(MONTH FROM d.sale_date)::int AS mo,
           SUM(d.pairs)::int AS qty,
           SUM(d.revenue)::bigint AS revenue
         FROM mart.mv_iseller_summary d
+        LEFT JOIN portal.store _s ON d.toko = _s.nama_iseller
         WHERE d.sale_date >= '2025-01-01' AND d.sale_date < '2027-01-01'
-        GROUP BY d.toko, d.branch,
+        GROUP BY d.toko, d.branch, _s.area,
                  EXTRACT(YEAR FROM d.sale_date),
                  EXTRACT(MONTH FROM d.sale_date)
       `),
@@ -65,8 +67,9 @@ export async function GET() {
 
     // Build lookup maps
     // salesMap: toko -> "YYYY-MM" -> { qty, revenue, branch }
-    const salesMap = new Map<string, Map<string, { qty: number; revenue: number; branch: string }>>();
-    const branchMap = new Map<string, string>(); // toko -> branch (latest)
+    const salesMap = new Map<string, Map<string, { qty: number; revenue: number; branch: string; area: string }>>();
+    const branchMap = new Map<string, string>(); // toko -> branch
+    const areaMap = new Map<string, string>(); // toko -> area
 
     for (const r of salesRes.rows) {
       const toko = String(r.toko);
@@ -76,8 +79,10 @@ export async function GET() {
         qty: Number(r.qty),
         revenue: Number(r.revenue),
         branch: String(r.branch),
+        area: String(r.area || 'Unknown'),
       });
       branchMap.set(toko, String(r.branch));
+      areaMap.set(toko, String(r.area || 'Unknown'));
     }
 
     // targetMap: toko -> "YYYY-MM" -> target
@@ -102,6 +107,7 @@ export async function GET() {
         const salesData = salesMap.get(toko);
         const targetData = targetMap.get(toko);
         const branch = branchMap.get(toko) || "—";
+        const area = areaMap.get(toko) || "Unknown";
 
         // Calculate total revenue across all months for sorting later
         let totalRevenue = 0;
@@ -118,7 +124,7 @@ export async function GET() {
           totalRevenue += revenue;
         }
 
-        return { toko, branch, totalRevenue, monthly };
+        return { toko, branch, area, totalRevenue, monthly };
       })
       // Sort by total revenue descending
       .sort((a, b) => b.totalRevenue - a.totalRevenue);

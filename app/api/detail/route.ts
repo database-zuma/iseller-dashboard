@@ -78,6 +78,13 @@ export async function GET(req: NextRequest) {
       vals.push(...colorFv);
     }
 
+    const areaFv = parseMulti(sp, "area");
+    if (areaFv.length) {
+      const phs = areaFv.map(() => `$${i++}`).join(", ");
+      conds.push(`d.toko IN (SELECT nama_iseller FROM portal.store WHERE area IN (${phs}))`);
+      vals.push(...areaFv);
+    }
+
     if (sp.get("excludeNonSku") === "1") {
       conds.push(`(d.produk IS NULL OR (d.produk NOT ILIKE '%shopbag%' AND d.produk NOT ILIKE '%paperbag%' AND d.produk NOT ILIKE '%paper bag%' AND d.produk NOT ILIKE '%shopping bag%' AND d.produk NOT ILIKE '%inbox%' AND d.produk NOT ILIKE '%box%' AND d.produk NOT ILIKE '%gwp%' AND d.produk NOT ILIKE '%gift%' AND d.produk NOT ILIKE '%voucher%' AND d.produk NOT ILIKE '%membership%' AND d.produk NOT ILIKE '%hanger%'))`);
     }
@@ -114,7 +121,8 @@ export async function GET(req: NextRequest) {
                     COALESCE(NULLIF(d.kodemix_series, ''), 'Unknown') as series,
                     COALESCE(NULLIF(d.kodemix_color, ''), 'Unknown') as color,
                     d.tipe,
-                    COALESCE(NULLIF(d.tier, 'Unknown'), 'Unknown') as tier`;
+                    COALESCE(NULLIF(d.tier, 'Unknown'), 'Unknown') as tier,
+                    COALESCE(MAX(_s.area), 'Unknown') as area`;
       
       orderBy = sort === "toko" ? `d.toko ${dir}` :
                 sort === "kode_besar" ? `d.kode_besar ${dir}` :
@@ -141,7 +149,8 @@ export async function GET(req: NextRequest) {
                     COALESCE(NULLIF(d.kodemix_series, ''), 'Unknown') as series,
                     COALESCE(NULLIF(d.kodemix_color, ''), 'Unknown') as color,
                     d.tipe,
-                    COALESCE(NULLIF(d.tier, 'Unknown'), 'Unknown') as tier`;
+                    COALESCE(NULLIF(d.tier, 'Unknown'), 'Unknown') as tier,
+                    COALESCE(MAX(_s.area), 'Unknown') as area`;
       
       orderBy = sort === "toko" ? `d.toko ${dir}` :
                 sort === "kode" ? `d.kode ${dir}` :
@@ -160,7 +169,7 @@ export async function GET(req: NextRequest) {
                SUM(d.pairs) AS pairs,
                SUM(d.revenue) AS revenue,
                CASE WHEN SUM(d.pairs) > 0 THEN SUM(d.revenue) / SUM(d.pairs) ELSE 0 END AS avg_price
-        FROM mart.mv_iseller_summary d
+        FROM mart.mv_iseller_summary d LEFT JOIN portal.store _s ON d.toko = _s.nama_iseller
         ${where}
         GROUP BY ${groupBy}
         ORDER BY ${orderBy}
@@ -171,6 +180,7 @@ export async function GET(req: NextRequest) {
         pairs: Number(r.pairs),
         revenue: Number(r.revenue),
         avg_price: Number(r.avg_price),
+        area: r.area || 'Unknown',
       }));
 
       return NextResponse.json({ rows }, {
@@ -184,7 +194,7 @@ export async function GET(req: NextRequest) {
              COALESCE(SUM(sub.revenue), 0) AS total_revenue
       FROM (
         SELECT SUM(d.pairs) AS pairs, SUM(d.revenue) AS revenue
-        FROM mart.mv_iseller_summary d
+        FROM mart.mv_iseller_summary d LEFT JOIN portal.store _s ON d.toko = _s.nama_iseller
         ${where}
         GROUP BY ${groupBy}
       ) sub
@@ -194,7 +204,7 @@ export async function GET(req: NextRequest) {
              SUM(d.pairs) AS pairs,
              SUM(d.revenue) AS revenue,
              CASE WHEN SUM(d.pairs) > 0 THEN SUM(d.revenue) / SUM(d.pairs) ELSE 0 END AS avg_price
-      FROM mart.mv_iseller_summary d
+      FROM mart.mv_iseller_summary d LEFT JOIN portal.store _s ON d.toko = _s.nama_iseller
       ${where}
       GROUP BY ${groupBy}
       ORDER BY ${orderBy}
@@ -215,6 +225,7 @@ export async function GET(req: NextRequest) {
       pairs: Number(r.pairs),
       revenue: Number(r.revenue),
       avg_price: Number(r.avg_price),
+      area: r.area || 'Unknown',
     }));
     const responseData = {
       rows,
