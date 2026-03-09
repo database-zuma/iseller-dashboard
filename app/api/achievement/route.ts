@@ -42,7 +42,7 @@ export async function GET() {
           SUM(d.pairs)::int AS qty,
           SUM(d.revenue)::bigint AS revenue
         FROM mart.mv_iseller_summary d
-        LEFT JOIN portal.store _s ON d.toko = _s.nama_iseller
+        LEFT JOIN (SELECT DISTINCT ON (nama_iseller) nama_iseller, area FROM portal.store ORDER BY nama_iseller) _s ON d.toko = _s.nama_iseller
         WHERE d.sale_date >= '2025-01-01' AND d.sale_date < '2027-01-01'
         GROUP BY d.toko, d.branch, _s.area,
                  EXTRACT(YEAR FROM d.sale_date),

@@ -169,7 +169,7 @@ export async function GET(req: NextRequest) {
                 SUM(p.discount_total) AS discount_total,
                 SUM(p.txn_count) AS txn_count
          FROM mart.mv_iseller_promo p
-         LEFT JOIN portal.store _s ON p.toko = _s.nama_iseller
+         LEFT JOIN (SELECT DISTINCT ON (nama_iseller) nama_iseller, area FROM portal.store ORDER BY nama_iseller) _s ON p.toko = _s.nama_iseller
          ${where}
          GROUP BY p.toko, p.branch, _s.area ORDER BY revenue DESC`,
         vals
@@ -217,7 +217,7 @@ export async function GET(req: NextRequest) {
       pool.query(
         `SELECT d.toko, d.branch, COALESCE(_s.area, 'Unknown') AS area, SUM(d.pairs) AS pairs, SUM(d.revenue) AS revenue
          FROM mart.mv_iseller_summary d
-         LEFT JOIN portal.store _s ON d.toko = _s.nama_iseller
+         LEFT JOIN (SELECT DISTINCT ON (nama_iseller) nama_iseller, area FROM portal.store ORDER BY nama_iseller) _s ON d.toko = _s.nama_iseller
          ${mvWhere}
          GROUP BY d.toko, d.branch, _s.area ORDER BY revenue DESC`,
         mvVals

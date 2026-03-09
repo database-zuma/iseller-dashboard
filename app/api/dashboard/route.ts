@@ -207,7 +207,7 @@ export async function GET(req: NextRequest) {
                CASE WHEN a.pairs > 0 THEN a.revenue / a.pairs ELSE 0 END AS asp,
                CASE WHEN COALESCE(x.transactions,0) > 0 THEN a.revenue / x.transactions ELSE 0 END AS atv
         FROM daily_agg a LEFT JOIN txn_agg x ON a.toko = x.toko
-        LEFT JOIN portal.store _s ON a.toko = _s.nama_iseller
+        LEFT JOIN (SELECT DISTINCT ON (nama_iseller) nama_iseller, area FROM portal.store ORDER BY nama_iseller) _s ON a.toko = _s.nama_iseller
         ORDER BY a.revenue DESC`,
         storeVals
       ),

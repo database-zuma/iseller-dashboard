@@ -169,7 +169,7 @@ export async function GET(req: NextRequest) {
                SUM(d.pairs) AS pairs,
                SUM(d.revenue) AS revenue,
                CASE WHEN SUM(d.pairs) > 0 THEN SUM(d.revenue) / SUM(d.pairs) ELSE 0 END AS avg_price
-        FROM mart.mv_iseller_summary d LEFT JOIN portal.store _s ON d.toko = _s.nama_iseller
+        FROM mart.mv_iseller_summary d LEFT JOIN (SELECT DISTINCT ON (nama_iseller) nama_iseller, area FROM portal.store ORDER BY nama_iseller) _s ON d.toko = _s.nama_iseller
         ${where}
         GROUP BY ${groupBy}
         ORDER BY ${orderBy}
@@ -194,7 +194,7 @@ export async function GET(req: NextRequest) {
              COALESCE(SUM(sub.revenue), 0) AS total_revenue
       FROM (
         SELECT SUM(d.pairs) AS pairs, SUM(d.revenue) AS revenue
-        FROM mart.mv_iseller_summary d LEFT JOIN portal.store _s ON d.toko = _s.nama_iseller
+        FROM mart.mv_iseller_summary d LEFT JOIN (SELECT DISTINCT ON (nama_iseller) nama_iseller, area FROM portal.store ORDER BY nama_iseller) _s ON d.toko = _s.nama_iseller
         ${where}
         GROUP BY ${groupBy}
       ) sub
@@ -204,7 +204,7 @@ export async function GET(req: NextRequest) {
              SUM(d.pairs) AS pairs,
              SUM(d.revenue) AS revenue,
              CASE WHEN SUM(d.pairs) > 0 THEN SUM(d.revenue) / SUM(d.pairs) ELSE 0 END AS avg_price
-      FROM mart.mv_iseller_summary d LEFT JOIN portal.store _s ON d.toko = _s.nama_iseller
+      FROM mart.mv_iseller_summary d LEFT JOIN (SELECT DISTINCT ON (nama_iseller) nama_iseller, area FROM portal.store ORDER BY nama_iseller) _s ON d.toko = _s.nama_iseller
       ${where}
       GROUP BY ${groupBy}
       ORDER BY ${orderBy}
