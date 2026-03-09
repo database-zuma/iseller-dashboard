@@ -1,8 +1,8 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo } from "react";
-import useSWR, { preload } from "swr";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import useSWR, { preload, useSWRConfig } from "swr";
 import { fetcher } from "@/lib/fetcher";
 import FilterBar from "@/components/FilterBar";
 import KpiCards from "@/components/KpiCards";
@@ -157,6 +157,34 @@ export default function HomeInner() {
     dedupingInterval: 60000,
   });
 
+  // Auto-detect stale data (raw newer than mart)
+  const { data: staleness, mutate: recheckStaleness } = useSWR<{ rawLatest: string; martLatest: string; isStale: boolean }>(
+    "/api/refresh",
+    fetcher,
+    { revalidateOnFocus: false, dedupingInterval: 120000 }
+  );
+
+  const { mutate: globalMutate } = useSWRConfig();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      const res = await fetch("/api/refresh", { method: "POST" });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Refresh failed");
+      // Re-validate all SWR caches to pick up fresh data
+      await globalMutate(() => true, undefined, { revalidate: true });
+      await recheckStaleness();
+    } catch (err) {
+      console.error("Refresh failed:", err);
+      alert(`Refresh failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshing, globalMutate, recheckStaleness]);
+
   // Push dashboard state to Metis context
   const { setDashboardContext } = useMetisContext();
 
@@ -205,11 +233,32 @@ export default function HomeInner() {
               <div className="w-1 h-5 bg-[#00E273] rounded-full" />
               <h1 className="text-lg font-semibold text-foreground tracking-tight">iSeller Dashboard</h1>
             </div>
-            {data?.lastUpdate && (
-              <span className="text-[10px] text-muted-foreground tabular-nums bg-muted/60 px-2.5 py-1 rounded-sm border border-border">
-                Last Update: <span className="font-semibold text-foreground">{formatLastUpdate(data.lastUpdate)}</span>
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {staleness?.isStale && !refreshing && (
+                <span className="text-[10px] text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-950/40 px-2 py-0.5 rounded-sm border border-amber-200 dark:border-amber-800 animate-pulse">
+                  New data available
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={handleRefresh}
+                disabled={refreshing}
+                title={refreshing ? 'Refreshing...' : 'Refresh mart data'}
+                className="text-[10px] text-muted-foreground hover:text-foreground bg-muted/60 hover:bg-muted px-2 py-1 rounded-sm border border-border transition-colors disabled:opacity-50 disabled:cursor-wait flex items-center gap-1"
+              >
+                {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative icon with text label */}
+                <svg className={`w-3 h-3 ${refreshing ? 'animate-spin' : ''}`} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                  <path d="M13.5 8a5.5 5.5 0 0 1-10.38 2.5M2.5 8a5.5 5.5 0 0 1 10.38-2.5" strokeLinecap="round" />
+                  <path d="M13.5 3v3.5H10M2.5 13v-3.5H6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {refreshing ? 'Refreshing...' : 'Refresh'}
+              </button>
+              {data?.lastUpdate && (
+                <span className="text-[10px] text-muted-foreground tabular-nums bg-muted/60 px-2.5 py-1 rounded-sm border border-border">
+                  Last Update: <span className="font-semibold text-foreground">{formatLastUpdate(data.lastUpdate)}</span>
+                </span>
+              )}
+            </div>
           </div>
           <FilterBar />
         </header>

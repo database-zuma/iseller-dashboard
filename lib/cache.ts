@@ -14,3 +14,7 @@ export function getCached<T>(key: string): T | null {
 export function setCache(key: string, data: unknown, ttl = TTL): void {
   store.set(key, { data, exp: Date.now() + ttl });
 }
+
+export function clearAllCache(): void {
+  store.clear();
+}
