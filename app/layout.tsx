@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "iSeller AI Dashboard - Zuma",
-  description: "Zuma Indonesia · iSeller POS Analytics Dashboard with Metis AI",
+  title: "Zuma Analytics Dashboard",
+  description: "Zuma Indonesia — POS Analytics Dashboard with Metis AI",
 };
 
 export default function RootLayout({

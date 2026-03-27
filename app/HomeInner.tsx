@@ -233,7 +233,7 @@ export default function HomeInner() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="w-1 h-5 bg-[#00E273] rounded-full" />
-              <h1 className="text-lg font-semibold text-foreground tracking-tight">iSeller Dashboard</h1>
+              <h1 className="text-lg font-semibold text-foreground tracking-tight">Zuma Analytics Dashboard</h1>
             </div>
             <div className="flex items-center gap-2">
               {staleness?.isStale && !refreshing && (
